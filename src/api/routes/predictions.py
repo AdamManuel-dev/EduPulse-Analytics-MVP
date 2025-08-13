@@ -1,5 +1,11 @@
 """
-Prediction endpoints for risk assessment.
+@fileoverview Risk prediction API endpoints for student assessment
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Single/batch predictions, model metrics, risk factors, validation
+Main APIs: predict_single(), predict_batch(), get_metrics()
+Constraints: Requires prediction service, batch size limits, student validation
+Patterns: Service layer integration, batch processing, error handling, metrics tracking
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -25,7 +31,29 @@ async def predict_single(
     db: Session = Depends(get_db)
 ):
     """
-    Generate risk prediction for a single student.
+    Generate dropout risk prediction for a single student.
+    
+    Analyzes student data through ML models to predict dropout risk,
+    including risk factors and confidence scores. Validates student
+    existence before processing.
+    
+    Args:
+        request: Prediction request containing student_id, optional date_range,
+                and include_factors flag for detailed risk factor analysis
+        db: Database session for student validation and data access
+        
+    Returns:
+        PredictResponse: Prediction result containing risk score, factors,
+                        confidence level, and metadata
+        
+    Raises:
+        HTTPException: 404 if student not found, 500 if prediction fails
+        
+    Examples:
+        >>> request = PredictRequest(student_id=uuid4(), include_factors=True)
+        >>> response = await predict_single(request, db)
+        >>> print(response.risk_score)
+        0.73
     """
     # Check if student exists
     student = db.query(models.Student).filter(
@@ -53,7 +81,30 @@ async def predict_batch(
     db: Session = Depends(get_db)
 ):
     """
-    Generate predictions for multiple students.
+    Generate dropout risk predictions for multiple students in a single request.
+    
+    Efficiently processes batch predictions for multiple students, validating
+    all student IDs exist before processing. Enforces configurable batch size
+    limits to prevent resource exhaustion.
+    
+    Args:
+        request: Batch prediction request containing list of student_ids and
+                optional top_k parameter for highest risk students
+        db: Database session for student validation and data access
+        
+    Returns:
+        BatchPredictResponse: Contains predictions list with individual results
+                             and optional top_k highest risk students
+        
+    Raises:
+        HTTPException: 400 if batch size exceeds limit, 404 if any student not found,
+                      500 if batch prediction processing fails
+        
+    Examples:
+        >>> request = BatchPredictRequest(student_ids=[id1, id2, id3], top_k=5)
+        >>> response = await predict_batch(request, db)
+        >>> print(len(response.predictions))
+        3
     """
     if len(request.student_ids) > settings.max_prediction_batch_size:
         raise HTTPException(
@@ -92,7 +143,28 @@ async def get_metrics(
     db: Session = Depends(get_db)
 ):
     """
-    Get model performance metrics.
+    Retrieve model performance metrics and data coverage statistics.
+    
+    Provides key performance indicators for the dropout prediction model,
+    including precision, recall, and data coverage metrics. Supports optional
+    date range filtering for temporal analysis.
+    
+    Args:
+        start_date: Optional start date filter in ISO format (YYYY-MM-DD)
+        end_date: Optional end date filter in ISO format (YYYY-MM-DD)
+        db: Database session for metrics calculation and data access
+        
+    Returns:
+        MetricsResponse: Performance metrics including precision_at_10, recall_at_10,
+                        average_lead_time_days, false_positive_rate, and data coverage
+                        statistics like total_students and predictions_made
+        
+    Examples:
+        >>> response = await get_metrics("2024-01-01", "2024-12-31", db)
+        >>> print(response.performance_metrics["precision_at_10"])
+        0.87
+        >>> print(response.data_coverage["total_students"])
+        1250
     """
     # TODO: Implement actual metrics calculation
     # For now, return mock metrics

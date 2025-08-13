@@ -1,5 +1,11 @@
 """
-Base classes for feature extraction in EduPulse Analytics.
+@fileoverview Abstract base class for feature extractors with common utilities
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: BaseFeatureExtractor, rolling statistics, pattern analysis, date range calculation
+Main APIs: extract(), get_feature_names(), calculate_rolling_stats(), calculate_pattern_features()
+Constraints: Requires SQLAlchemy session, settings window/lag days, student data
+Patterns: Abstract factory pattern, numpy statistics, linear trend calculation
 """
 
 from abc import ABC, abstractmethod
@@ -17,10 +23,28 @@ settings = get_settings()
 
 class BaseFeatureExtractor(ABC):
     """
-    Abstract base class for feature extractors.
+    Abstract base class for feature extractors with common utilities.
+    
+    Provides shared functionality for feature extraction including date range
+    calculation, rolling statistics, and pattern analysis. All concrete feature
+    extractors should inherit from this class.
+    
+    Args:
+        db_session: SQLAlchemy database session for data access
+        
+    Attributes:
+        db: Database session for queries
+        window_days: Number of days to look back for feature calculation
+        lag_days: Number of days to lag behind reference date to avoid data leakage
     """
     
     def __init__(self, db_session: Session):
+        """
+        Initialize the feature extractor with database connection and settings.
+        
+        Args:
+            db_session: SQLAlchemy session for database access
+        """
         self.db = db_session
         self.window_days = settings.feature_window_days
         self.lag_days = settings.feature_lag_days
@@ -51,13 +75,24 @@ class BaseFeatureExtractor(ABC):
     
     def get_date_range(self, reference_date: date) -> tuple[date, date]:
         """
-        Calculate the date range for feature extraction.
+        Calculate the date range for feature extraction with lag to prevent data leakage.
+        
+        Computes a date range that looks back from a lagged reference date to avoid
+        using future information. The lag prevents data leakage in prediction scenarios.
         
         Args:
-            reference_date: Reference date for calculation
+            reference_date: Reference date for calculation (typically prediction date)
             
         Returns:
-            Tuple of (start_date, end_date)
+            tuple[date, date]: Tuple of (start_date, end_date) where:
+                - end_date = reference_date - lag_days
+                - start_date = end_date - window_days
+                
+        Examples:
+            >>> extractor = BaseFeatureExtractor(db_session)
+            >>> start, end = extractor.get_date_range(date(2024, 6, 15))
+            >>> print(f"Range: {start} to {end}")
+            Range: 2024-05-01 to 2024-06-01
         """
         end_date = reference_date - timedelta(days=self.lag_days)
         start_date = end_date - timedelta(days=self.window_days)
@@ -65,13 +100,27 @@ class BaseFeatureExtractor(ABC):
     
     def calculate_rolling_stats(self, values: List[float]) -> Dict[str, float]:
         """
-        Calculate rolling statistics for a series of values.
+        Calculate comprehensive rolling statistics for a time series of values.
+        
+        Computes descriptive statistics and linear trend analysis for a sequence
+        of numeric values, providing robust handling of empty or single-value series.
         
         Args:
-            values: List of numeric values
+            values: List of numeric values in chronological order
             
         Returns:
-            Dictionary with mean, std, min, max, trend
+            dict: Dictionary containing statistical measures:
+                - mean: Average value across the series
+                - std: Standard deviation (population)
+                - min: Minimum value in the series
+                - max: Maximum value in the series
+                - trend: Linear trend coefficient (slope per time unit)
+                
+        Examples:
+            >>> values = [85.0, 87.0, 83.0, 90.0, 88.0]
+            >>> stats = extractor.calculate_rolling_stats(values)
+            >>> print(f"Mean: {stats['mean']:.1f}, Trend: {stats['trend']:.2f}")
+            Mean: 86.6, Trend: 0.70
         """
         if not values:
             return {
@@ -101,13 +150,27 @@ class BaseFeatureExtractor(ABC):
     
     def calculate_pattern_features(self, dates: List[date]) -> Dict[str, float]:
         """
-        Calculate pattern-based features from dates.
+        Calculate temporal pattern features from a sequence of dates.
+        
+        Analyzes date patterns to identify behavioral indicators such as day-of-week
+        preferences, consecutive streaks, and temporal gaps. Useful for detecting
+        patterns in attendance, discipline incidents, or other time-based events.
         
         Args:
-            dates: List of dates to analyze
+            dates: List of dates to analyze for temporal patterns
             
         Returns:
-            Dictionary of pattern features
+            dict: Dictionary containing pattern features:
+                - monday_ratio: Proportion of events occurring on Mondays
+                - friday_ratio: Proportion of events occurring on Fridays
+                - consecutive_days: Maximum consecutive day streak
+                - gaps_mean: Average gap in days between consecutive events
+                
+        Examples:
+            >>> dates = [date(2024, 1, 1), date(2024, 1, 2), date(2024, 1, 5)]
+            >>> patterns = extractor.calculate_pattern_features(dates)
+            >>> print(f"Consecutive days: {patterns['consecutive_days']}")
+            Consecutive days: 2
         """
         if not dates:
             return {

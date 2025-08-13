@@ -1,5 +1,11 @@
 """
-Pydantic schemas for data validation and API serialization.
+@fileoverview Pydantic data models for API serialization and validation
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Student/feature/prediction schemas, enums, request/response models, validation
+Main APIs: Student, Prediction, PredictRequest, BatchPredictRequest, TrainingFeedback
+Constraints: Pydantic v2, UUID fields, field validators, from_attributes config
+Patterns: Base/Create/Update pattern, enum validation, field constraints, nested models
 """
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator

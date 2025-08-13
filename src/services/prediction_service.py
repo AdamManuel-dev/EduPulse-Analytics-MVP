@@ -1,5 +1,11 @@
 """
-Prediction service for real-time ML inference.
+@fileoverview ML prediction service for real-time student risk assessment
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Model loading, sequence preparation, risk prediction, batch processing, factor analysis
+Main APIs: predict_risk(), predict_batch(), prepare_sequence(), load_model()
+Constraints: Requires GRU model, feature pipeline, PyTorch, database session
+Patterns: Singleton service, attention-based interpretability, fallback predictions, caching
 """
 
 import torch
@@ -22,10 +28,26 @@ settings = get_settings()
 
 class PredictionService:
     """
-    Service for making student risk predictions using trained ML models.
+    Service for making student dropout risk predictions using trained ML models.
+    
+    Provides a high-level interface for real-time risk assessment using GRU-based
+    neural networks with attention mechanisms. Handles model loading, feature
+    preparation, batch processing, and result interpretation.
+    
+    Attributes:
+        model: GRU attention model for predictions
+        feature_pipeline: Pipeline for feature extraction
+        device: PyTorch device (CPU/CUDA)
+        model_path: Path to saved model weights
     """
     
     def __init__(self):
+        """
+        Initialize the prediction service with model loading and device setup.
+        
+        Automatically loads the best available model weights or initializes
+        with random weights if no saved model is found.
+        """
         self.model = None
         self.feature_pipeline = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -36,7 +58,19 @@ class PredictionService:
     
     def load_model(self) -> None:
         """
-        Load the trained model from disk.
+        Load the trained GRU model from disk with graceful fallback handling.
+        
+        Initializes the model architecture and attempts to load saved weights.
+        If no saved model exists, initializes with random weights. Configures
+        the model for evaluation mode and moves to appropriate device.
+        
+        Raises:
+            Exception: Logged but not raised - gracefully falls back to random weights
+            
+        Examples:
+            >>> service = PredictionService()
+            >>> service.load_model()  # Called automatically in __init__
+            Model loaded from /models/best_model.pt
         """
         try:
             # Initialize model architecture
@@ -73,15 +107,25 @@ class PredictionService:
         sequence_length: int = 20
     ) -> torch.Tensor:
         """
-        Prepare input sequence for a student.
+        Prepare sequential feature input for GRU model prediction.
+        
+        Extracts features for multiple time points to create a temporal sequence
+        that captures student behavior patterns over time. Features are extracted
+        weekly going backwards from the reference date.
         
         Args:
-            student_id: Student UUID
-            reference_date: End date for sequence (defaults to today)
-            sequence_length: Number of weeks in sequence
+            student_id: UUID string of the student
+            reference_date: End date for sequence (defaults to current date)
+            sequence_length: Number of weekly time steps in sequence (default: 20)
             
         Returns:
-            Input tensor for model
+            torch.Tensor: Feature tensor of shape (1, sequence_length, num_features)
+                         ready for model input
+                         
+        Examples:
+            >>> tensor = service.prepare_sequence("123-456", date(2024, 6, 15), 10)
+            >>> print(tensor.shape)
+            torch.Size([1, 10, 42])
         """
         if reference_date is None:
             reference_date = datetime.now().date()
@@ -123,15 +167,33 @@ class PredictionService:
         include_factors: bool = True
     ) -> schemas.PredictResponse:
         """
-        Generate risk prediction for a student.
+        Generate comprehensive dropout risk prediction for a single student.
+        
+        Performs end-to-end risk assessment including feature sequence preparation,
+        model inference, attention-based factor analysis, and result persistence.
+        Returns risk score, category classification, and optional contributing factors.
         
         Args:
-            student_id: Student UUID
-            reference_date: Date for prediction
-            include_factors: Whether to include contributing factors
+            student_id: UUID string of the student to assess
+            reference_date: Date to predict risk for (defaults to current date)
+            include_factors: Whether to extract and return contributing risk factors
+                            using attention weights (default: True)
             
         Returns:
-            Prediction response
+            PredictResponse: Complete prediction response containing:
+                - prediction: Stored prediction record with risk score/category
+                - contributing_factors: List of interpretable risk factors (if requested)
+                - timestamp: When the prediction was generated
+                
+        Raises:
+            Exception: Falls back to rule-based prediction if ML model fails
+            
+        Examples:
+            >>> response = service.predict_risk("123-456-789", include_factors=True)
+            >>> print(f"Risk: {response.prediction.risk_score:.2f}")
+            Risk: 0.73
+            >>> print(f"Category: {response.prediction.risk_category}")
+            Category: high
         """
         try:
             # Prepare input sequence

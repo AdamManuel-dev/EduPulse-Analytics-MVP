@@ -1,5 +1,11 @@
 """
-Academic grades feature extraction for EduPulse Analytics.
+@fileoverview Academic grade feature extractor for performance metrics and trends
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: GPA calculation, grade statistics, trends, subject analysis, assignment type analysis
+Main APIs: extract(), get_feature_names(), _calculate_grade_trend(), _analyze_by_subject()
+Constraints: Requires Grade model, numeric grade_value, submission_date, course_id
+Patterns: 4.0 GPA scale conversion, linear trend fitting, core/elective classification
 """
 
 from typing import Dict, List

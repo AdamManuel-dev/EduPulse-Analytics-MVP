@@ -1,5 +1,11 @@
 """
-Attendance feature extraction for EduPulse Analytics.
+@fileoverview Attendance feature extractor for student attendance patterns and metrics
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Attendance rates, absence patterns, tardiness trends, weekly rolling statistics
+Main APIs: extract(), get_feature_names(), _calculate_weekly_attendance_rates()
+Constraints: Requires AttendanceRecord model, date range, student ID
+Patterns: Status-based rate calculation, pattern analysis, ISO week grouping
 """
 
 from typing import Dict, List
@@ -107,13 +113,36 @@ class AttendanceFeatureExtractor(BaseFeatureExtractor):
     
     def _empty_features(self) -> Dict[str, float]:
         """
-        Return empty feature dictionary with zeros.
+        Return empty feature dictionary with zeros for all attendance features.
+        
+        Used when no attendance records are found for a student within the
+        specified date range, ensuring consistent feature vector dimensions.
+        
+        Returns:
+            dict: Dictionary with all feature names mapped to 0.0 values
         """
         return {name: 0.0 for name in self.get_feature_names()}
     
     def _calculate_weekly_attendance_rates(self, records: List[models.AttendanceRecord]) -> List[float]:
         """
-        Calculate weekly attendance rates from records.
+        Calculate weekly attendance rates for trend analysis.
+        
+        Groups attendance records by ISO week number and calculates the
+        attendance rate for each week. Used for rolling statistics to
+        identify trends in attendance patterns over time.
+        
+        Args:
+            records: List of attendance records to analyze
+            
+        Returns:
+            list: Weekly attendance rates as proportions (0.0 to 1.0)
+                 ordered chronologically by week number
+                 
+        Examples:
+            >>> records = [AttendanceRecord(date=..., status='present'), ...]
+            >>> rates = extractor._calculate_weekly_attendance_rates(records)
+            >>> print(f"Week 1 rate: {rates[0]:.2f}")
+            Week 1 rate: 0.80
         """
         if not records:
             return []

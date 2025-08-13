@@ -1,5 +1,11 @@
 """
-Main FastAPI application for EduPulse Analytics MVP.
+@fileoverview Main FastAPI application for EduPulse Analytics MVP
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: API initialization, CORS setup, middleware, route mounting, metrics endpoint
+Main APIs: lifespan(), root(), app instance configuration
+Constraints: Requires DATABASE_URL, REDIS_URL environment variables
+Patterns: Uses lifespan context for startup/shutdown, structured logging throughout
 """
 
 from fastapi import FastAPI, HTTPException

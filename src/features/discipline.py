@@ -1,5 +1,11 @@
 """
-Discipline incident feature extraction for EduPulse Analytics.
+@fileoverview Discipline incident feature extractor for behavioral risk analysis
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Incident frequency/severity, escalation patterns, time gaps, type diversity
+Main APIs: extract(), get_feature_names(), _calculate_severity_trend(), _calculate_incident_acceleration()
+Constraints: Requires DisciplineIncident model, severity_level, incident_date, incident_type
+Patterns: Shannon entropy for diversity, gap trend for acceleration, linear regression
 """
 
 from typing import Dict, List

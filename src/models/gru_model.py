@@ -1,5 +1,11 @@
 """
-GRU-based neural network model for student risk prediction.
+@fileoverview GRU neural network with multi-head attention for student risk prediction
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Multi-modal GRU, self-attention, risk scoring, category classification, interpretability
+Main APIs: GRUAttentionModel(), forward(), predict(), get_attention_weights(), EarlyStopping()
+Constraints: Requires PyTorch, 42 input features (14+15+13), 4 risk categories
+Patterns: Modality-specific GRUs, residual connections, sigmoid risk + softmax categories
 """
 
 import torch
@@ -11,7 +17,25 @@ import numpy as np
 
 class GRUAttentionModel(nn.Module):
     """
-    GRU model with self-attention mechanism for temporal student data.
+    Multi-modal GRU model with self-attention for student dropout risk prediction.
+    
+    Implements a sophisticated neural architecture that processes student data across
+    three modalities (attendance, grades, discipline) using separate GRU networks,
+    then combines them with multi-head attention for temporal pattern recognition.
+    
+    Architecture:
+        1. Modality-specific GRU layers for specialized feature processing
+        2. Feature concatenation and normalization  
+        3. Multi-head self-attention for temporal dependencies
+        4. Residual connections and layer normalization
+        5. Dual output heads for risk score regression and category classification
+    
+    Attributes:
+        input_size: Total number of input features (42: 14+15+13)
+        hidden_size: Hidden state dimension for fusion layers
+        num_layers: Number of recurrent layers in each GRU
+        num_heads: Number of attention heads for temporal modeling
+        bidirectional: Whether GRUs process sequences in both directions
     """
     
     def __init__(
@@ -24,15 +48,23 @@ class GRUAttentionModel(nn.Module):
         bidirectional: bool = True
     ):
         """
-        Initialize the GRU attention model.
+        Initialize the multi-modal GRU attention model architecture.
+        
+        Sets up modality-specific GRU layers, self-attention mechanism, and
+        dual output heads for both continuous risk scores and discrete categories.
         
         Args:
-            input_size: Number of input features
-            hidden_size: Size of GRU hidden state
-            num_layers: Number of GRU layers
-            num_heads: Number of attention heads
-            dropout: Dropout probability
-            bidirectional: Whether to use bidirectional GRU
+            input_size: Total input feature dimensions (must be 42 for current setup)
+            hidden_size: Hidden state size for fusion layers (default: 128)
+            num_layers: Number of GRU layers per modality (default: 2)
+            num_heads: Number of attention heads (default: 4, must divide hidden_size)
+            dropout: Dropout probability for regularization (default: 0.3)
+            bidirectional: Enable bidirectional GRU processing (default: True)
+            
+        Examples:
+            >>> model = GRUAttentionModel(hidden_size=256, num_heads=8)
+            >>> print(model.combined_hidden_size)
+            512  # (256//3) * 3 * 2 for bidirectional
         """
         super(GRUAttentionModel, self).__init__()
         

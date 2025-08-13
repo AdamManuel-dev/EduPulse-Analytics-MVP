@@ -1,5 +1,11 @@
 """
-Training pipeline for the GRU attention model.
+@fileoverview Model training pipeline with PyTorch dataset and trainer classes
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: StudentSequenceDataset, ModelTrainer, epoch training/validation, early stopping
+Main APIs: StudentSequenceDataset(), ModelTrainer(), fit(), save_model(), load_model()
+Constraints: Requires PyTorch, GRU model, feature pipeline, student sequence data
+Patterns: PyTorch Dataset/DataLoader, combined loss (risk + category), gradient clipping
 """
 
 import torch
@@ -9,8 +15,6 @@ from torch.utils.data import Dataset, DataLoader
 import numpy as np
 from typing import Tuple, Dict, List, Optional
 from datetime import datetime, timedelta
-import os
-import json
 from pathlib import Path
 
 from src.models.gru_model import GRUAttentionModel, EarlyStopping
@@ -23,7 +27,18 @@ settings = get_settings()
 
 class StudentSequenceDataset(Dataset):
     """
-    PyTorch dataset for student temporal sequences.
+    PyTorch dataset for temporal student feature sequences with sliding window sampling.
+    
+    Creates training samples by extracting sequential feature vectors for students
+    over configurable time windows. Supports multiple samples per student using
+    sliding window approach to increase training data diversity.
+    
+    Attributes:
+        student_ids: List of student UUID strings to include in dataset
+        sequence_length: Number of weekly time steps in each sequence
+        prediction_horizon: Days into future for prediction target
+        feature_pipeline: Pipeline for extracting student features
+        samples: Prepared list of training samples with targets
     """
     
     def __init__(
@@ -34,13 +49,24 @@ class StudentSequenceDataset(Dataset):
         feature_pipeline: Optional[FeaturePipeline] = None
     ):
         """
-        Initialize the dataset.
+        Initialize the dataset with student IDs and temporal configuration.
+        
+        Sets up the dataset for training with configurable sequence length and
+        prediction horizon. Automatically prepares all training samples during
+        initialization for efficient batch loading.
         
         Args:
-            student_ids: List of student IDs to include
-            sequence_length: Number of weeks to use as input
-            prediction_horizon: Days ahead to predict
-            feature_pipeline: Feature extraction pipeline
+            student_ids: List of student UUID strings to include in training
+            sequence_length: Number of weekly time steps for input sequences (default: 20)
+            prediction_horizon: Days ahead to predict dropout risk (default: 30)
+            feature_pipeline: Pre-configured feature extraction pipeline, or None
+                             to create a new one with database connection
+                             
+        Examples:
+            >>> student_ids = ["123-456", "789-012"]
+            >>> dataset = StudentSequenceDataset(student_ids, sequence_length=15)
+            >>> print(len(dataset))
+            20  # 10 samples per student
         """
         self.student_ids = student_ids
         self.sequence_length = sequence_length
@@ -58,7 +84,23 @@ class StudentSequenceDataset(Dataset):
     
     def _prepare_samples(self) -> List[Dict]:
         """
-        Prepare training samples from student data.
+        Prepare training samples using sliding window approach across time.
+        
+        Creates multiple training samples per student by sliding a temporal window
+        across different time periods. Each sample contains a sequence of feature
+        vectors and corresponding target risk labels.
+        
+        Returns:
+            list: List of sample dictionaries containing:
+                - student_id: Student UUID
+                - sequence_dates: List of dates for feature extraction
+                - target_date: Date for prediction target
+                - target_risk: Risk score target (0-1)
+                - target_category: Risk category target (0-3)
+                
+        Note:
+            In production, target values would be computed from actual outcomes.
+            Current implementation uses mock targets for demonstration.
         """
         samples = []
         
@@ -93,10 +135,25 @@ class StudentSequenceDataset(Dataset):
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
-        Get a single sample.
+        Retrieve a single training sample by index with feature extraction.
         
+        Extracts features for all dates in the sample's sequence and returns
+        formatted tensors ready for model training. Features are extracted
+        on-demand to maintain memory efficiency.
+        
+        Args:
+            idx: Sample index in the dataset
+            
         Returns:
-            Tuple of (features, risk_target, category_target)
+            tuple: Three-element tuple containing:
+                - torch.Tensor: Feature sequence of shape (sequence_length, num_features)
+                - torch.Tensor: Risk score target of shape (1,)
+                - torch.Tensor: Category target of shape (1,) with values 0-3
+                
+        Examples:
+            >>> X, y_risk, y_cat = dataset[0]
+            >>> print(f"Features: {X.shape}, Risk: {y_risk.item():.2f}")
+            Features: torch.Size([20, 42]), Risk: 0.73
         """
         sample = self.samples[idx]
         
@@ -121,7 +178,21 @@ class StudentSequenceDataset(Dataset):
 
 class ModelTrainer:
     """
-    Trainer class for the GRU attention model.
+    Comprehensive trainer for GRU attention model with multi-task learning.
+    
+    Handles end-to-end training of dropout prediction models with combined loss
+    functions for risk score regression and category classification. Includes
+    early stopping, learning rate scheduling, and comprehensive metrics tracking.
+    
+    Attributes:
+        model: GRU attention model being trained
+        device: PyTorch device for computation
+        risk_criterion: Loss function for risk score regression
+        category_criterion: Loss function for category classification
+        optimizer: Adam optimizer for parameter updates
+        scheduler: Learning rate scheduler for training stability
+        early_stopping: Early stopping handler to prevent overfitting
+        history: Training metrics history for analysis
     """
     
     def __init__(
@@ -130,11 +201,21 @@ class ModelTrainer:
         device: str = 'cpu'
     ):
         """
-        Initialize the trainer.
+        Initialize the trainer with model and optimization configuration.
+        
+        Sets up loss functions, optimizer, learning rate scheduler, and early
+        stopping for robust training. Configures multi-task learning for both
+        continuous risk scores and discrete risk categories.
         
         Args:
-            model: GRU attention model to train
-            device: Device to train on ('cpu' or 'cuda')
+            model: Pre-initialized GRU attention model to train
+            device: Computation device ('cpu' or 'cuda' if available)
+            
+        Examples:
+            >>> model = GRUAttentionModel(input_size=42, hidden_size=128)
+            >>> trainer = ModelTrainer(model, device='cuda')
+            >>> print(trainer.device)
+            cuda
         """
         self.model = model
         self.device = torch.device(device)
@@ -177,13 +258,25 @@ class ModelTrainer:
     
     def train_epoch(self, dataloader: DataLoader) -> Dict[str, float]:
         """
-        Train for one epoch.
+        Execute one complete training epoch with gradient updates.
+        
+        Performs forward pass, loss calculation, backpropagation, and parameter
+        updates for all batches in the training set. Includes gradient clipping
+        for training stability.
         
         Args:
-            dataloader: Training data loader
+            dataloader: PyTorch DataLoader with training batches
             
         Returns:
-            Dictionary of training metrics
+            dict: Training metrics containing:
+                - loss: Combined average loss across all batches
+                - risk_loss: Risk regression loss component
+                - category_loss: Category classification loss component
+                
+        Examples:
+            >>> metrics = trainer.train_epoch(train_loader)
+            >>> print(f"Training loss: {metrics['loss']:.4f}")
+            Training loss: 0.7234
         """
         self.model.train()
         
@@ -237,13 +330,24 @@ class ModelTrainer:
     
     def validate(self, dataloader: DataLoader) -> Dict[str, float]:
         """
-        Validate the model.
+        Evaluate model performance on validation set without parameter updates.
+        
+        Performs forward pass through validation data in evaluation mode
+        (no gradient computation) to assess model generalization performance.
         
         Args:
-            dataloader: Validation data loader
+            dataloader: PyTorch DataLoader with validation batches
             
         Returns:
-            Dictionary of validation metrics
+            dict: Validation metrics containing:
+                - loss: Combined average validation loss
+                - risk_loss: Risk regression validation loss
+                - category_loss: Category classification validation loss
+                
+        Examples:
+            >>> val_metrics = trainer.validate(val_loader)
+            >>> print(f"Validation loss: {val_metrics['loss']:.4f}")
+            Validation loss: 0.8156
         """
         self.model.eval()
         
@@ -291,12 +395,24 @@ class ModelTrainer:
         epochs: int = 100
     ) -> None:
         """
-        Train the model.
+        Execute complete model training with early stopping and learning rate scheduling.
+        
+        Runs the full training loop including epoch training, validation,
+        metrics tracking, and early stopping. Automatically saves training
+        history for analysis and applies learning rate decay on plateaus.
         
         Args:
-            train_loader: Training data loader
-            val_loader: Validation data loader
-            epochs: Number of epochs to train
+            train_loader: DataLoader containing training batches
+            val_loader: DataLoader containing validation batches  
+            epochs: Maximum number of training epochs (may stop early)
+            
+        Examples:
+            >>> trainer.fit(train_loader, val_loader, epochs=50)
+            Starting training for 50 epochs...
+            Epoch 10/50
+              Train Loss: 0.7234
+              Val Loss: 0.8156
+            Early stopping triggered at epoch 23
         """
         print(f"Starting training for {epochs} epochs...")
         
@@ -331,10 +447,18 @@ class ModelTrainer:
     
     def save_model(self, path: str) -> None:
         """
-        Save the trained model.
+        Save complete model state including weights, optimizer, and training history.
+        
+        Persists all necessary components for model restoration including
+        model weights, optimizer state, training history, and model configuration.
+        Creates parent directories if they don't exist.
         
         Args:
-            path: Path to save the model
+            path: File path to save the model checkpoint
+            
+        Examples:
+            >>> trainer.save_model('/models/best_model.pt')
+            Model saved to /models/best_model.pt
         """
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         
@@ -354,10 +478,18 @@ class ModelTrainer:
     
     def load_model(self, path: str) -> None:
         """
-        Load a trained model.
+        Load complete model state from saved checkpoint.
+        
+        Restores model weights, optimizer state, and training history from
+        a previously saved checkpoint. Ensures model is ready for continued
+        training or inference.
         
         Args:
-            path: Path to the saved model
+            path: File path to the saved model checkpoint
+            
+        Examples:
+            >>> trainer.load_model('/models/best_model.pt')
+            Model loaded from /models/best_model.pt
         """
         checkpoint = torch.load(path, map_location=self.device)
         

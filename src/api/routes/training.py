@@ -1,5 +1,11 @@
 """
-Training and model update endpoints.
+@fileoverview Model training and update API endpoints for continuous learning
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Model update queuing, status tracking, feedback corrections, training jobs
+Main APIs: update_model(), get_update_status()
+Constraints: Requires TrainingUpdateRequest, async training jobs, feedback storage
+Patterns: Async job queuing, status polling, educator feedback integration
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -20,7 +26,27 @@ async def update_model(
     db: Session = Depends(get_db)
 ):
     """
-    Queue a model update with new training data.
+    Queue a model retraining job with new data and feedback corrections.
+    
+    Initiates an asynchronous model update process that incorporates new
+    training data and educator feedback to improve prediction accuracy.
+    Stores feedback corrections for future training cycles.
+    
+    Args:
+        request: Training update request containing new training data and
+                feedback corrections from educators about prediction accuracy
+        db: Database session for storing feedback and tracking update jobs
+        
+    Returns:
+        TrainingUpdateResponse: Update job details including unique update_id,
+                               current status, and estimated completion time
+        
+    Examples:
+        >>> corrections = [{"prediction_id": "123", "actual_outcome": "graduated"}]
+        >>> request = TrainingUpdateRequest(feedback_corrections=corrections)
+        >>> response = await update_model(request, db)
+        >>> print(response.status)
+        queued
     """
     # TODO: Implement actual training update logic
     # For now, return mock response
@@ -55,7 +81,26 @@ async def get_update_status(
     db: Session = Depends(get_db)
 ):
     """
-    Get status of a training update job.
+    Retrieve the current status and progress of a model training update job.
+    
+    Provides real-time information about ongoing or completed training
+    jobs, including progress percentage and estimated completion time.
+    
+    Args:
+        update_id: Unique identifier of the training update job
+        db: Database session for status lookup and tracking
+        
+    Returns:
+        dict: Status information containing update_id, current status
+              (queued/in_progress/completed/failed), progress percentage,
+              and estimated completion time
+        
+    Examples:
+        >>> status = await get_update_status("550e8400-e29b-41d4-a716-446655440000", db)
+        >>> print(status["status"])
+        in_progress
+        >>> print(status["progress"])
+        45
     """
     # TODO: Implement actual status tracking
     return {

@@ -1,5 +1,11 @@
 """
-Feature pipeline orchestrator for EduPulse Analytics.
+@fileoverview Feature extraction pipeline orchestrator with caching and batch processing
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Multi-extractor orchestration, Redis caching, batch processing, database storage
+Main APIs: extract_features(), extract_batch_features(), get_feature_names(), get_feature_importance()
+Constraints: Requires SQLAlchemy session, Redis URL, feature extractors, StudentFeature model
+Patterns: Cache-aside pattern, error-tolerant extraction, consistent feature ordering
 """
 
 from typing import Dict, List, Optional
@@ -22,10 +28,34 @@ settings = get_settings()
 
 class FeaturePipeline:
     """
-    Orchestrates feature extraction from multiple sources.
+    Orchestrates feature extraction from multiple sources with caching and error handling.
+    
+    Coordinates multiple feature extractors (attendance, grades, discipline) to create
+    a unified feature vector for machine learning models. Provides Redis caching for
+    performance and database storage for persistence.
+    
+    Args:
+        db_session: SQLAlchemy session for database operations
+        use_cache: Whether to enable Redis caching for extracted features
+        
+    Attributes:
+        db: Database session for data access
+        extractors: Dictionary of named feature extractors
+        redis_client: Redis client for caching (if enabled)
+        use_cache: Boolean flag for cache usage
     """
     
     def __init__(self, db_session: Session, use_cache: bool = True):
+        """
+        Initialize the feature pipeline with database connection and optional caching.
+        
+        Sets up feature extractors and Redis connection if caching is enabled.
+        Gracefully degrades to no caching if Redis connection fails.
+        
+        Args:
+            db_session: SQLAlchemy session for database access
+            use_cache: Enable Redis caching for performance optimization
+        """
         self.db = db_session
         self.use_cache = use_cache and settings.feature_cache_enabled
         
@@ -145,14 +175,43 @@ class FeaturePipeline:
     
     def _get_cache_key(self, student_id: str, reference_date: date) -> str:
         """
-        Generate cache key for features.
+        Generate a unique cache key for feature storage and retrieval.
+        
+        Creates a deterministic cache key based on student ID and reference date
+        using MD5 hashing to ensure consistent key generation.
+        
+        Args:
+            student_id: UUID string of the student
+            reference_date: Date for feature calculation
+            
+        Returns:
+            str: MD5 hash of the cache key components
+            
+        Examples:
+            >>> key = pipeline._get_cache_key("123-456-789", date(2024, 6, 15))
+            >>> print(len(key))
+            32
         """
         key_data = f"features:{student_id}:{reference_date.isoformat()}"
         return hashlib.md5(key_data.encode()).hexdigest()
     
     def _get_cached_features(self, cache_key: str) -> Optional[np.ndarray]:
         """
-        Retrieve features from cache.
+        Retrieve cached feature vector from Redis if available.
+        
+        Attempts to fetch and deserialize a previously computed feature vector
+        from Redis cache. Returns None if cache miss or error occurs.
+        
+        Args:
+            cache_key: Unique cache key for the feature vector
+            
+        Returns:
+            numpy.ndarray or None: Cached feature vector if found, None otherwise
+            
+        Examples:
+            >>> features = pipeline._get_cached_features(cache_key)
+            >>> if features is not None:
+            ...     print(f"Cache hit: {len(features)} features")
         """
         if not self.redis_client:
             return None
@@ -169,7 +228,18 @@ class FeaturePipeline:
     
     def _cache_features(self, cache_key: str, features: np.ndarray) -> None:
         """
-        Store features in cache.
+        Store computed feature vector in Redis cache with TTL.
+        
+        Serializes feature vector to JSON and stores in Redis with configurable
+        time-to-live to balance performance and memory usage.
+        
+        Args:
+            cache_key: Unique cache key for storage
+            features: Feature vector to cache
+            
+        Examples:
+            >>> pipeline._cache_features("abc123", np.array([0.8, 0.5, 2.1]))
+            # Features stored in Redis with TTL
         """
         if not self.redis_client:
             return
@@ -184,7 +254,20 @@ class FeaturePipeline:
                               reference_date: date, 
                               feature_vector: np.ndarray) -> None:
         """
-        Store computed features in database.
+        Persist computed features to database for long-term storage and analysis.
+        
+        Stores feature vectors in the StudentFeature table, updating existing
+        records or creating new ones. Also extracts key aggregate metrics for
+        easier querying and reporting.
+        
+        Args:
+            student_id: UUID string of the student
+            reference_date: Date the features were calculated for
+            feature_vector: Complete feature vector as numpy array
+            
+        Examples:
+            >>> pipeline._store_features_in_db("123-456", date(2024, 6, 15), features)
+            # Features stored in StudentFeature table
         """
         try:
             # Check if features already exist for this date

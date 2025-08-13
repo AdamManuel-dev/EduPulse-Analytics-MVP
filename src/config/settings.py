@@ -1,5 +1,11 @@
 """
-Application settings using Pydantic for validation and type checking.
+@fileoverview Application configuration management with Pydantic validation
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Environment-based config, database/Redis/Celery settings, ML parameters, validation
+Main APIs: Settings(), get_settings(), parse_cors_origins(), validate_environment()
+Constraints: Requires .env file, PostgresDsn, RedisDsn, SECRET_KEY, JWT_SECRET_KEY
+Patterns: LRU cached singleton, field validators, environment mode properties
 """
 
 from functools import lru_cache
@@ -10,7 +16,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Main application settings."""
+    """
+    Main application configuration with environment-based validation.
+    
+    Provides comprehensive configuration management for the EduPulse application
+    using Pydantic for validation and type safety. Settings are loaded from
+    environment variables with fallback defaults.
+    
+    Configuration categories include:
+        - Application: Environment, debug mode, logging
+        - API: Host, port, CORS, rate limiting  
+        - Database: PostgreSQL connection and pooling
+        - ML: Model parameters and training settings
+        - Infrastructure: Redis, Celery, monitoring
+        
+    Examples:
+        >>> settings = Settings()
+        >>> print(f"Running in {settings.environment} mode")
+        Running in development mode
+        >>> print(f"Debug enabled: {settings.debug}")
+        Debug enabled: False
+    """
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -152,7 +178,23 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
-        """Parse CORS origins from comma-separated string."""
+        """
+        Parse CORS origins from comma-separated string or list.
+        
+        Handles flexible input formats for CORS configuration, accepting
+        either pre-split lists or comma-separated strings from environment
+        variables.
+        
+        Args:
+            v: CORS origins as string (comma-separated) or list
+            
+        Returns:
+            list: List of trimmed origin strings
+            
+        Examples:
+            >>> parse_cors_origins("http://localhost:3000,https://app.com")
+            ['http://localhost:3000', 'https://app.com']
+        """
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return v
@@ -193,7 +235,22 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Get cached settings instance."""
+    """
+    Get cached settings instance using LRU cache for performance.
+    
+    Creates a singleton-like pattern for settings access while maintaining
+    the ability to refresh configuration if needed. The LRU cache ensures
+    settings are only parsed once per application lifecycle.
+    
+    Returns:
+        Settings: Validated and cached settings instance
+        
+    Examples:
+        >>> settings = get_settings()
+        >>> settings2 = get_settings()  # Returns same cached instance
+        >>> print(settings is settings2)
+        True
+    """
     return Settings()
 
 

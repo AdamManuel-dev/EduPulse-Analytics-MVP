@@ -1,5 +1,11 @@
 """
-SQLAlchemy ORM models for EduPulse Analytics.
+@fileoverview SQLAlchemy ORM models for EduPulse database schema
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Student, predictions, features, attendance, grades, discipline models with relationships
+Main APIs: Student, Prediction, StudentFeature, AttendanceRecord, Grade, DisciplineIncident
+Constraints: PostgreSQL schema, UUID primary keys, check constraints, unique constraints
+Patterns: Declarative base, cascade delete-orphan, timezone-aware timestamps, JSON columns
 """
 
 from sqlalchemy import (

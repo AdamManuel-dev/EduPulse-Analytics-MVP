@@ -1,5 +1,11 @@
 """
-Database connection and session management for EduPulse Analytics.
+@fileoverview Database connection management with SQLAlchemy and session handling
+@lastmodified 2025-08-13T00:50:05-05:00
+
+Features: Engine creation, session factory, context manager, connection pooling
+Main APIs: get_db(), init_db(), SessionLocal, Base, engine
+Constraints: Requires PostgreSQL URL, SQLAlchemy, connection pool settings
+Patterns: Context manager for sessions, declarative base, pool pre-ping for health
 """
 
 from sqlalchemy import create_engine
@@ -32,8 +38,23 @@ Base = declarative_base()
 @contextmanager
 def get_db() -> Generator:
     """
-    Context manager for database sessions.
-    Ensures proper cleanup of database connections.
+    Context manager for database sessions with automatic cleanup.
+    
+    Provides a database session that is automatically closed after use,
+    ensuring proper connection pool management and preventing connection
+    leaks. Should be used for all database operations.
+    
+    Yields:
+        Session: SQLAlchemy database session for queries and transactions
+        
+    Examples:
+        >>> with get_db() as db:
+        ...     students = db.query(Student).all()
+        ...     print(f"Found {len(students)} students")
+        
+        >>> # Or as dependency injection in FastAPI
+        >>> def get_students(db: Session = Depends(get_db)):
+        ...     return db.query(Student).all()
     """
     db = SessionLocal()
     try:
@@ -43,7 +64,23 @@ def get_db() -> Generator:
 
 def init_db():
     """
-    Initialize database tables.
-    This should be called once during application startup.
+    Initialize database schema by creating all tables.
+    
+    Creates all database tables defined in the SQLAlchemy models using
+    the declarative base metadata. Should be called once during application
+    startup or when setting up a new database instance.
+    
+    Note:
+        This function is idempotent - it will only create tables that don't
+        already exist. Existing tables and data are not affected.
+        
+    Examples:
+        >>> # During application startup
+        >>> init_db()
+        >>> print("Database tables created successfully")
+        
+        >>> # In tests or development setup
+        >>> from src.db.database import init_db
+        >>> init_db()  # Ensures all tables exist
     """
     Base.metadata.create_all(bind=engine)
