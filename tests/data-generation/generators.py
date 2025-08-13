@@ -3,12 +3,13 @@ Data generation utilities for comprehensive testing
 Creates realistic student profiles, courses, and interaction patterns
 """
 
-import random
 import json
+import random
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, asdict
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 from faker import Faker
 

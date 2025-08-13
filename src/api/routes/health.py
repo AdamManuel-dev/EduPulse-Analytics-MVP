@@ -8,13 +8,14 @@ Constraints: Requires FastAPI router, database session, Redis connection, settin
 Patterns: Kubernetes health/readiness probes, dependency injection, exception handling
 """
 
+from datetime import datetime
+
+import redis
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime
-import redis
 
-from src.db.database import get_db
 from src.config.settings import settings
+from src.db.database import get_db
 
 router = APIRouter()
 

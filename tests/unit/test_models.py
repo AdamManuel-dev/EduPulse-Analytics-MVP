@@ -2,23 +2,23 @@
 Unit tests for ML models and database models.
 """
 
-import pytest
-import torch
-import numpy as np
 from datetime import date, datetime
 from uuid import uuid4
 
-from src.models.gru_model import GRUAttentionModel, EarlyStopping
+import numpy as np
+import pytest
+import torch
+
+from src.db.models import AttendanceRecord, DisciplineIncident, Grade, Student
+from src.models.gru_model import EarlyStopping, GRUAttentionModel
 from src.models.schemas import (
-    StudentCreate,
+    Prediction,
     PredictionRequest,
     PredictResponse,
-    TrainingUpdateRequest,
-    Prediction,
-    RiskFactor,
     RiskCategory,
+    StudentCreate,
+    TrainingUpdateRequest,
 )
-from src.db.models import Student, AttendanceRecord, Grade, DisciplineIncident
 
 
 class TestGRUModel:
@@ -229,7 +229,9 @@ class TestPydanticSchemas:
         """Test training update request schema."""
         config_data = {
             "student_outcomes": [{"student_id": str(uuid4()), "actual_outcome": "dropout"}],
-            "feedback_corrections": [{"prediction_id": str(uuid4()), "correction": "false_positive"}],
+            "feedback_corrections": [
+                {"prediction_id": str(uuid4()), "correction": "false_positive"}
+            ],
             "update_mode": "incremental",
         }
 
@@ -285,9 +287,7 @@ class TestDatabaseModels:
         db_session.commit()
 
         retrieved = (
-            db_session.query(AttendanceRecord)
-            .filter_by(student_id=sample_student.id)
-            .first()
+            db_session.query(AttendanceRecord).filter_by(student_id=sample_student.id).first()
         )
         assert retrieved is not None
         assert retrieved.status == "present"

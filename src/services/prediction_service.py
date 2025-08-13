@@ -8,18 +8,19 @@ Constraints: Requires GRU model, feature pipeline, PyTorch, database session
 Patterns: Singleton service, attention-based interpretability, fallback predictions, caching
 """
 
-import torch
-import numpy as np
-from typing import Dict, List, Tuple, Optional
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
-from src.models.gru_model import GRUAttentionModel
-from src.features.pipeline import FeaturePipeline
+import numpy as np
+import torch
+
 from src.config.settings import get_settings
-from src.db.database import get_db
 from src.db import models as db_models
+from src.db.database import get_db
+from src.features.pipeline import FeaturePipeline
 from src.models import schemas
+from src.models.gru_model import GRUAttentionModel
 
 settings = get_settings()
 

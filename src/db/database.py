@@ -8,12 +8,13 @@ Constraints: Requires PostgreSQL URL, SQLAlchemy, connection pool settings
 Patterns: Context manager for sessions, declarative base, pool pre-ping for health
 """
 
+import os
+from contextlib import contextmanager
+from typing import Generator
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from contextlib import contextmanager
-import os
-from typing import Generator
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://edupulse_user:development_password@localhost:5432/edupulse"

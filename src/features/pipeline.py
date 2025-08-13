@@ -8,19 +8,20 @@ Constraints: Requires SQLAlchemy session, Redis URL, feature extractors, Student
 Patterns: Cache-aside pattern, error-tolerant extraction, consistent feature ordering
 """
 
-from typing import Dict, List, Optional
-from datetime import date
-import numpy as np
-from sqlalchemy.orm import Session
-import redis
-import json
 import hashlib
+import json
+from datetime import date
+from typing import Dict, List, Optional
 
-from src.features.attendance import AttendanceFeatureExtractor
-from src.features.grades import GradeFeatureExtractor
-from src.features.discipline import DisciplineFeatureExtractor
+import numpy as np
+import redis
+from sqlalchemy.orm import Session
+
 from src.config.settings import get_settings
 from src.db import models
+from src.features.attendance import AttendanceFeatureExtractor
+from src.features.discipline import DisciplineFeatureExtractor
+from src.features.grades import GradeFeatureExtractor
 
 settings = get_settings()
 

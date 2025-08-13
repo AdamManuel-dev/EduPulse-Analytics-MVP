@@ -8,11 +8,12 @@ Constraints: Pydantic v2, UUID fields, field validators, from_attributes config
 Patterns: Base/Create/Update pattern, enum validation, field constraints, nested models
 """
 
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List, Dict, Any
 from datetime import date, datetime
-from uuid import UUID
 from enum import Enum
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RiskCategory(str, Enum):
@@ -279,6 +280,7 @@ TrainingConfig = TrainingUpdateRequest
 
 class RiskLevel(str, Enum):
     """Legacy enum for risk level (use RiskCategory instead)."""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"

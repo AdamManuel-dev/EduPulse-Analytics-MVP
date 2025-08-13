@@ -8,19 +8,20 @@ Constraints: Requires PyTorch, GRU model, feature pipeline, student sequence dat
 Patterns: PyTorch Dataset/DataLoader, combined loss (risk + category), gradient clipping
 """
 
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-from typing import Tuple, Dict, List, Optional
-from datetime import datetime, timedelta
-from pathlib import Path
+from torch.utils.data import DataLoader, Dataset
 
-from src.models.gru_model import GRUAttentionModel, EarlyStopping
-from src.features.pipeline import FeaturePipeline
 from src.config.settings import get_settings
 from src.db.database import get_db
+from src.features.pipeline import FeaturePipeline
+from src.models.gru_model import EarlyStopping, GRUAttentionModel
 
 settings = get_settings()
 

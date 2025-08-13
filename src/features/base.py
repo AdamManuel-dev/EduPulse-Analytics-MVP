@@ -9,8 +9,9 @@ Patterns: Abstract factory pattern, numpy statistics, linear trend calculation
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List
 from datetime import date, timedelta
+from typing import Dict, List
+
 import numpy as np
 from sqlalchemy.orm import Session
 

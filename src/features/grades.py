@@ -8,13 +8,14 @@ Constraints: Requires Grade model, numeric grade_value, submission_date, course_
 Patterns: 4.0 GPA scale conversion, linear trend fitting, core/elective classification
 """
 
-from typing import Dict, List
 from datetime import date
-from sqlalchemy import and_
-import numpy as np
+from typing import Dict, List
 
-from src.features.base import BaseFeatureExtractor
+import numpy as np
+from sqlalchemy import and_
+
 from src.db import models
+from src.features.base import BaseFeatureExtractor
 
 
 class GradeFeatureExtractor(BaseFeatureExtractor):

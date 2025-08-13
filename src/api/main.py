@@ -8,15 +8,16 @@ Constraints: Requires DATABASE_URL, REDIS_URL environment variables
 Patterns: Uses lifespan context for startup/shutdown, structured logging throughout
 """
 
+from contextlib import asynccontextmanager
+
+import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import structlog
 from prometheus_client import make_asgi_app
 
-from src.config.settings import get_settings
 from src.api.routes import health, predictions, students, training
-from src.db.database import engine, Base
+from src.config.settings import get_settings
+from src.db.database import Base, engine
 
 settings = get_settings()
 

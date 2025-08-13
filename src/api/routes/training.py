@@ -8,13 +8,14 @@ Constraints: Requires TrainingUpdateRequest, async training jobs, feedback stora
 Patterns: Async job queuing, status polling, educator feedback integration
 """
 
+from datetime import datetime, timedelta
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from uuid import uuid4
-from datetime import datetime, timedelta
 
-from src.db.database import get_db
 from src.db import models
+from src.db.database import get_db
 from src.models import schemas
 
 router = APIRouter()

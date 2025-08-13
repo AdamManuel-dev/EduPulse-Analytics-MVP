@@ -2,9 +2,7 @@
 Unit tests for API routes - testing actual implemented endpoints.
 """
 
-from datetime import date, datetime
 from uuid import uuid4
-from unittest.mock import patch, MagicMock
 
 
 class TestHealthEndpoints:
@@ -43,7 +41,7 @@ class TestStudentEndpoints:
         student_data = {
             "district_id": "STU99999",
             "first_name": "New",
-            "last_name": "Student", 
+            "last_name": "Student",
             "grade_level": 11,
             "date_of_birth": "2007-05-15",
             "gender": "F",
@@ -51,7 +49,7 @@ class TestStudentEndpoints:
             "socioeconomic_status": "Low",
             "gpa": 3.5,
             "attendance_rate": 0.92,
-            "parent_contact": "parent@test.com"
+            "parent_contact": "parent@test.com",
         }
 
         response = client.post("/api/v1/students/", json=student_data)
@@ -67,7 +65,7 @@ class TestStudentEndpoints:
         student_data = {
             "district_id": "STU00001",
             "first_name": "First",
-            "last_name": "Student", 
+            "last_name": "Student",
             "grade_level": 10,
             "date_of_birth": "2006-01-01",
             "gender": "M",
@@ -75,7 +73,7 @@ class TestStudentEndpoints:
             "socioeconomic_status": "Middle",
             "gpa": 3.0,
             "attendance_rate": 0.85,
-            "parent_contact": "first@test.com"
+            "parent_contact": "first@test.com",
         }
 
         # Create first student
@@ -102,9 +100,9 @@ class TestStudentEndpoints:
             "socioeconomic_status": "High",
             "gpa": 3.8,
             "attendance_rate": 0.95,
-            "parent_contact": "gettest@test.com"
+            "parent_contact": "gettest@test.com",
         }
-        
+
         create_response = client.post("/api/v1/students/", json=student_data)
         assert create_response.status_code in [200, 201]
         created_student = create_response.json()
@@ -147,9 +145,9 @@ class TestStudentEndpoints:
             "socioeconomic_status": "Middle",
             "gpa": 3.0,
             "attendance_rate": 0.88,
-            "parent_contact": "updatetest@test.com"
+            "parent_contact": "updatetest@test.com",
         }
-        
+
         create_response = client.post("/api/v1/students/", json=student_data)
         assert create_response.status_code in [200, 201]
         created_student = create_response.json()
@@ -182,26 +180,23 @@ class TestPredictionEndpoints:
             "socioeconomic_status": "Low",
             "gpa": 2.5,
             "attendance_rate": 0.75,
-            "parent_contact": "predtest@test.com"
+            "parent_contact": "predtest@test.com",
         }
-        
+
         create_response = client.post("/api/v1/students/", json=student_data)
         assert create_response.status_code in [200, 201]
         created_student = create_response.json()
         student_id = created_student["id"]
 
-        # Test prediction request structure 
-        request_data = {
-            "student_id": student_id,
-            "include_factors": True
-        }
+        # Test prediction request structure
+        request_data = {"student_id": student_id, "include_factors": True}
 
         # The prediction might fail due to ML service not being available,
         # but we're testing the API endpoint structure
         response = client.post("/api/v1/predict", json=request_data)
         # Accept both success (200) and server error (500) as valid endpoint responses
         assert response.status_code in [200, 500]
-        
+
         if response.status_code == 200:
             data = response.json()
             assert "student_id" in data or "risk_score" in data
@@ -209,10 +204,7 @@ class TestPredictionEndpoints:
     def test_prediction_nonexistent_student(self, client):
         """Test prediction for non-existent student."""
         fake_uuid = str(uuid4())
-        request_data = {
-            "student_id": fake_uuid,
-            "include_factors": False
-        }
+        request_data = {"student_id": fake_uuid, "include_factors": False}
 
         response = client.post("/api/v1/predict", json=request_data)
         assert response.status_code == 404
@@ -235,17 +227,14 @@ class TestPredictionEndpoints:
                 "socioeconomic_status": "Middle",
                 "gpa": 3.0 + i * 0.2,
                 "attendance_rate": 0.85,
-                "parent_contact": f"batchtest{i}@test.com"
+                "parent_contact": f"batchtest{i}@test.com",
             }
-            
+
             create_response = client.post("/api/v1/students/", json=student_data)
             assert create_response.status_code in [200, 201]
             student_ids.append(create_response.json()["id"])
 
-        request_data = {
-            "student_ids": student_ids,
-            "top_k": 2
-        }
+        request_data = {"student_ids": student_ids, "top_k": 2}
 
         # Test the endpoint structure, accepting both success and error
         response = client.post("/api/v1/predict/batch", json=request_data)
@@ -256,10 +245,7 @@ class TestPredictionEndpoints:
         # Generate fake UUIDs to test the limit
         student_ids = [str(uuid4()) for _ in range(101)]  # Exceeds limit
 
-        request_data = {
-            "student_ids": student_ids,
-            "top_k": 10
-        }
+        request_data = {"student_ids": student_ids, "top_k": 10}
 
         response = client.post("/api/v1/predict/batch", json=request_data)
         assert response.status_code == 400
@@ -277,10 +263,10 @@ class TestTrainingEndpoints:
                 {
                     "prediction_id": "pred_test_123",
                     "actual_outcome": "graduated",
-                    "educator_notes": "Student showed significant improvement in final semester"
+                    "educator_notes": "Student showed significant improvement in final semester",
                 }
             ],
-            "retrain_full": False
+            "retrain_full": False,
         }
 
         response = client.post("/api/v1/train/update", json=training_data)
@@ -294,7 +280,7 @@ class TestTrainingEndpoints:
         """Test getting training job status."""
         # Use a fake UUID for testing
         fake_update_id = str(uuid4())
-        
+
         response = client.get(f"/api/v1/train/status/{fake_update_id}")
         assert response.status_code == 200  # Currently returns mock data
         data = response.json()
@@ -309,15 +295,15 @@ class TestTrainingEndpoints:
                 {
                     "prediction_id": "pred_001",
                     "actual_outcome": "dropped_out",
-                    "educator_notes": "Student faced family challenges"
+                    "educator_notes": "Student faced family challenges",
                 },
                 {
-                    "prediction_id": "pred_002", 
+                    "prediction_id": "pred_002",
                     "actual_outcome": "graduated",
-                    "educator_notes": "Exceeded expectations"
-                }
+                    "educator_notes": "Exceeded expectations",
+                },
             ],
-            "retrain_full": True
+            "retrain_full": True,
         }
 
         response = client.post("/api/v1/train/update", json=training_data)
@@ -337,14 +323,14 @@ class TestMetricsEndpoint:
         data = response.json()
         assert "performance_metrics" in data
         assert "data_coverage" in data
-        
+
         # Check performance metrics structure
         perf_metrics = data["performance_metrics"]
         assert "precision_at_10" in perf_metrics
         assert "recall_at_10" in perf_metrics
         assert "average_lead_time_days" in perf_metrics
         assert "false_positive_rate" in perf_metrics
-        
+
         # Check data coverage structure
         data_coverage = data["data_coverage"]
         assert "total_students" in data_coverage

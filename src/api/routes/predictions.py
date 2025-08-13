@@ -11,10 +11,10 @@ Patterns: Service layer integration, batch processing, error handling, metrics t
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from src.db.database import get_db
-from src.db import models
-from src.models import schemas
 from src.config.settings import get_settings
+from src.db import models
+from src.db.database import get_db
+from src.models import schemas
 from src.services.prediction_service import prediction_service
 
 settings = get_settings()

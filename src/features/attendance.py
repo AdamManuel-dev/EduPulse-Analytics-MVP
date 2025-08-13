@@ -8,12 +8,13 @@ Constraints: Requires AttendanceRecord model, date range, student ID
 Patterns: Status-based rate calculation, pattern analysis, ISO week grouping
 """
 
-from typing import Dict, List
 from datetime import date
+from typing import Dict, List
+
 from sqlalchemy import and_
 
-from src.features.base import BaseFeatureExtractor
 from src.db import models
+from src.features.base import BaseFeatureExtractor
 
 
 class AttendanceFeatureExtractor(BaseFeatureExtractor):

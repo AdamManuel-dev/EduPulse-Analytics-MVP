@@ -3,30 +3,29 @@ End-to-end tests for complete student workflows
 Tests the actual implemented API endpoints with real functionality
 """
 
-import pytest
-import time
 import asyncio
+import importlib.util
 import json
-from datetime import datetime
-from typing import Dict, List, Any
-import numpy as np
-from dataclasses import dataclass
-import sys
 import os
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Dict, List
 from uuid import uuid4
+
+import numpy as np
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import from the correct path (data-generation directory with hyphen)
-import importlib.util
-import os
 
 # Load the generators module manually due to hyphen in directory name
 spec = importlib.util.spec_from_file_location(
-    "generators",
-    os.path.join(os.path.dirname(__file__), "..", "data-generation", "generators.py")
+    "generators", os.path.join(os.path.dirname(__file__), "..", "data-generation", "generators.py")
 )
 generators = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(generators)
@@ -101,17 +100,21 @@ class StudentWorkflowSimulator:
             student_data = {
                 "district_id": self.profile.id[:8],  # Truncate to reasonable length
                 "first_name": self.profile.name.split()[0],
-                "last_name": self.profile.name.split()[-1] if len(self.profile.name.split()) > 1 else "Doe",
-                "grade_level": getattr(self.profile, 'grade_level', 9),
+                "last_name": self.profile.name.split()[-1]
+                if len(self.profile.name.split()) > 1
+                else "Doe",
+                "grade_level": getattr(self.profile, "grade_level", 9),
                 "date_of_birth": "2005-01-01",
-                "gender": getattr(self.profile, 'gender', 'M'),
-                "ethnicity": getattr(self.profile, 'ethnicity', 'Other'),
-                "socioeconomic_status": getattr(self.profile, 'socioeconomic_status', 'middle'),
-                "gpa": min(4.0, max(0.0, self.profile.base_performance / 25.0)),  # Convert to 4.0 scale
+                "gender": getattr(self.profile, "gender", "M"),
+                "ethnicity": getattr(self.profile, "ethnicity", "Other"),
+                "socioeconomic_status": getattr(self.profile, "socioeconomic_status", "middle"),
+                "gpa": min(
+                    4.0, max(0.0, self.profile.base_performance / 25.0)
+                ),  # Convert to 4.0 scale
                 "attendance_rate": 0.90,
                 "parent_contact": f"parent_{self.profile.id[:8]}@example.com",
             }
-            
+
             response = await self.client.post("/api/v1/students/", json=student_data)
             metrics.response_times.append(time.time() - start)
             if response.status_code in [200, 201]:
@@ -132,7 +135,7 @@ class StudentWorkflowSimulator:
         """Get student details by ID"""
         if not self.student_id:
             return
-            
+
         start = time.time()
         try:
             response = await self.client.get(f"/api/v1/students/{self.student_id}")
@@ -150,17 +153,21 @@ class StudentWorkflowSimulator:
         """Update student record with new information"""
         if not self.student_id:
             return
-            
+
         start = time.time()
         try:
             # Simulate GPA update based on performance
-            new_gpa = min(4.0, max(0.0, (self.profile.base_performance / 25.0) + np.random.uniform(-0.2, 0.2)))
+            new_gpa = min(
+                4.0, max(0.0, (self.profile.base_performance / 25.0) + np.random.uniform(-0.2, 0.2))
+            )
             update_data = {
                 "gpa": new_gpa,
-                "attendance_rate": min(1.0, max(0.0, 0.90 + np.random.uniform(-0.1, 0.1)))
+                "attendance_rate": min(1.0, max(0.0, 0.90 + np.random.uniform(-0.1, 0.1))),
             }
-            
-            response = await self.client.patch(f"/api/v1/students/{self.student_id}", json=update_data)
+
+            response = await self.client.patch(
+                f"/api/v1/students/{self.student_id}", json=update_data
+            )
             metrics.response_times.append(time.time() - start)
             if response.status_code == 200:
                 metrics.success_count += 1
@@ -196,16 +203,13 @@ class StudentWorkflowSimulator:
         """Get risk prediction for the student"""
         if not self.student_id:
             return
-            
+
         start = time.time()
         try:
             request_data = {
                 "student_id": self.student_id,
                 "include_factors": True,
-                "date_range": {
-                    "start": "2024-01-01",
-                    "end": "2024-12-31"
-                }
+                "date_range": {"start": "2024-01-01", "end": "2024-12-31"},
             }
             response = await self.client.post("/api/v1/predict", json=request_data)
             metrics.response_times.append(time.time() - start)
@@ -217,7 +221,9 @@ class StudentWorkflowSimulator:
                 else:
                     # Prediction service not implemented, but endpoint exists
                     metrics.success_count += 1
-                    print("Prediction service returned 500 (expected - service not fully implemented)")
+                    print(
+                        "Prediction service returned 500 (expected - service not fully implemented)"
+                    )
             else:
                 metrics.error_count += 1
                 print(f"Prediction failed with status: {response.status_code} - {response.text}")
@@ -229,13 +235,10 @@ class StudentWorkflowSimulator:
         """Get batch predictions for multiple students"""
         if not student_ids:
             return
-            
+
         start = time.time()
         try:
-            request_data = {
-                "student_ids": student_ids,
-                "top_k": 5
-            }
+            request_data = {"student_ids": student_ids, "top_k": 5}
             response = await self.client.post("/api/v1/predict/batch", json=request_data)
             metrics.response_times.append(time.time() - start)
             # Accept both 200 and 500 as the prediction service may not be fully implemented
@@ -245,10 +248,14 @@ class StudentWorkflowSimulator:
                     self.session_data["batch_predictions"] = response.json()
                 else:
                     metrics.success_count += 1
-                    print("Batch prediction service returned 500 (expected - service not fully implemented)")
+                    print(
+                        "Batch prediction service returned 500 (expected - service not fully implemented)"
+                    )
             else:
                 metrics.error_count += 1
-                print(f"Batch prediction failed with status: {response.status_code} - {response.text}")
+                print(
+                    f"Batch prediction failed with status: {response.status_code} - {response.text}"
+                )
         except Exception as e:
             metrics.error_count += 1
             print(f"Error getting batch prediction: {e}")
@@ -257,7 +264,9 @@ class StudentWorkflowSimulator:
         """Get model performance metrics"""
         start = time.time()
         try:
-            response = await self.client.get("/api/v1/metrics?start_date=2024-01-01&end_date=2024-12-31")
+            response = await self.client.get(
+                "/api/v1/metrics?start_date=2024-01-01&end_date=2024-12-31"
+            )
             metrics.response_times.append(time.time() - start)
             if response.status_code == 200:
                 metrics.success_count += 1
@@ -299,14 +308,11 @@ class StudentWorkflowSimulator:
                 {
                     "prediction_id": str(uuid4()),
                     "actual_outcome": "graduated" if np.random.random() > 0.3 else "dropped_out",
-                    "educator_notes": f"Student {self.profile.student_type.value} - actual outcome observed"
+                    "educator_notes": f"Student {self.profile.student_type.value} - actual outcome observed",
                 }
             ]
-            
-            request_data = {
-                "feedback_corrections": feedback_corrections,
-                "retrain_full": False
-            }
+
+            request_data = {"feedback_corrections": feedback_corrections, "retrain_full": False}
             response = await self.client.post("/api/v1/train/update", json=request_data)
             metrics.response_times.append(time.time() - start)
             if response.status_code in [200, 201]:
@@ -315,7 +321,9 @@ class StudentWorkflowSimulator:
                 self.session_data["update_id"] = response_data.get("update_id")
             else:
                 metrics.error_count += 1
-                print(f"Training update failed with status: {response.status_code} - {response.text}")
+                print(
+                    f"Training update failed with status: {response.status_code} - {response.text}"
+                )
         except Exception as e:
             metrics.error_count += 1
             print(f"Error triggering model update: {e}")
@@ -325,7 +333,7 @@ class StudentWorkflowSimulator:
         update_id = self.session_data.get("update_id")
         if not update_id:
             return
-            
+
         start = time.time()
         try:
             response = await self.client.get(f"/api/v1/train/status/{update_id}")
@@ -381,7 +389,7 @@ class TestE2EStudentWorkflows:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        
+
         # Test readiness endpoint - might fail due to Redis not being available
         response = client.get("/ready")
         # Accept both ready and not ready states for testing
@@ -432,7 +440,7 @@ class TestE2EStudentWorkflows:
         all_response_times = []
         for m in metrics:
             all_response_times.extend(m.response_times)
-        
+
         if all_response_times:
             p95_time = np.percentile(all_response_times, 95)
             assert p95_time < 5.0, f"P95 response time too high: {p95_time}s"
@@ -441,7 +449,7 @@ class TestE2EStudentWorkflows:
         """Test basic CRUD operations on students - test endpoint structure only"""
         # This test verifies the endpoint structure, not full functionality
         # since database integration has issues in the e2e test setup
-        
+
         # Create a student - may fail due to database setup but endpoint exists
         student_data = {
             "district_id": "TEST001",
@@ -454,25 +462,31 @@ class TestE2EStudentWorkflows:
             "socioeconomic_status": "middle",
             "gpa": 3.5,
             "attendance_rate": 0.95,
-            "parent_contact": "parent@test.com"
+            "parent_contact": "parent@test.com",
         }
-        
+
         response = client.post("/api/v1/students/", json=student_data)
         # Accept any reasonable HTTP response - endpoint exists (including database errors)
-        assert response.status_code in [200, 201, 400, 422, 500], f"Unexpected status: {response.status_code}"
-        
+        assert response.status_code in [
+            200,
+            201,
+            400,
+            422,
+            500,
+        ], f"Unexpected status: {response.status_code}"
+
         # If creation succeeded, test other operations
         if response.status_code in [200, 201]:
             student = response.json()
             student_id = student["id"]
-            
+
             # Test other CRUD operations
             response = client.get(f"/api/v1/students/{student_id}")
             assert response.status_code in [200, 404, 500]
-            
+
             response = client.patch(f"/api/v1/students/{student_id}", json={"gpa": 3.8})
             assert response.status_code in [200, 404, 500]
-        
+
         # List students endpoint should exist
         response = client.get("/api/v1/students/")
         assert response.status_code in [200, 500], f"List endpoint failed: {response.status_code}"
@@ -481,25 +495,20 @@ class TestE2EStudentWorkflows:
         """Test prediction endpoints structure - may use mock student ID"""
         # Test single prediction endpoint - use a mock UUID
         from uuid import uuid4
+
         mock_student_id = str(uuid4())
-        
-        prediction_request = {
-            "student_id": mock_student_id,
-            "include_factors": True
-        }
+
+        prediction_request = {"student_id": mock_student_id, "include_factors": True}
         response = client.post("/api/v1/predict", json=prediction_request)
         # Accept 404 (student not found), 500 (service not implemented), or 200 (working)
         assert response.status_code in [200, 404, 500], f"Unexpected status: {response.status_code}"
-        
+
         # Test batch prediction endpoint
-        batch_request = {
-            "student_ids": [mock_student_id],
-            "top_k": 1
-        }
+        batch_request = {"student_ids": [mock_student_id], "top_k": 1}
         response = client.post("/api/v1/predict/batch", json=batch_request)
         # Accept 404 (student not found), 500 (service not implemented), or 200 (working)
         assert response.status_code in [200, 404, 500], f"Unexpected status: {response.status_code}"
-        
+
         # Test metrics endpoint - this should work as it returns mock data
         response = client.get("/api/v1/metrics")
         assert response.status_code == 200
@@ -515,24 +524,29 @@ class TestE2EStudentWorkflows:
                 {
                     "prediction_id": str(uuid4()),
                     "actual_outcome": "graduated",
-                    "educator_notes": "Student succeeded despite prediction"
+                    "educator_notes": "Student succeeded despite prediction",
                 }
             ],
-            "retrain_full": False
+            "retrain_full": False,
         }
-        
+
         response = client.post("/api/v1/train/update", json=update_request)
         # Accept validation errors as well
-        assert response.status_code in [200, 201, 422, 500], f"Training update failed: {response.status_code}"
-        
+        assert response.status_code in [
+            200,
+            201,
+            422,
+            500,
+        ], f"Training update failed: {response.status_code}"
+
         # If the request succeeded, test status endpoint
         if response.status_code in [200, 201]:
             response_data = response.json()
             assert "update_id" in response_data
             assert "status" in response_data
-            
+
             update_id = response_data["update_id"]
-            
+
             # Test training status endpoint
             response = client.get(f"/api/v1/train/status/{update_id}")
             assert response.status_code == 200

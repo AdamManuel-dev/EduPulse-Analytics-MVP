@@ -8,40 +8,41 @@ Constraints: PostgreSQL schema, UUID primary keys, check constraints, unique con
 Patterns: Declarative base, cascade delete-orphan, timezone-aware timestamps, JSON columns
 """
 
+import uuid
+
 from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
     Column,
-    String,
-    Integer,
-    Float,
     Date,
     DateTime,
-    Boolean,
+    Float,
     ForeignKey,
-    JSON,
-    ARRAY,
-    CheckConstraint,
+    Integer,
+    String,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from sqlalchemy.types import TypeDecorator, CHAR
-import uuid
+from sqlalchemy.types import CHAR, TypeDecorator
 
 from .database import Base
 
 
 class GUID(TypeDecorator):
     """Platform-independent GUID type.
-    
+
     Uses PostgreSQL's UUID type on PostgreSQL, otherwise uses
     CHAR(32) to store UUIDs as hex strings.
     """
+
     impl = CHAR
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        if dialect.name == 'postgresql':
+        if dialect.name == "postgresql":
             return dialect.type_descriptor(UUID())
         else:
             return dialect.type_descriptor(CHAR(32))
@@ -49,7 +50,7 @@ class GUID(TypeDecorator):
     def process_bind_param(self, value, dialect):
         if value is None:
             return value
-        elif dialect.name == 'postgresql':
+        elif dialect.name == "postgresql":
             return str(value)
         else:
             if not isinstance(value, uuid.UUID):
@@ -82,7 +83,9 @@ class Student(Base):
     ethnicity = Column(String(100))
     socioeconomic_status = Column(String(50))
     gpa = Column(Float, CheckConstraint("gpa >= 0 AND gpa <= 4.0"))
-    attendance_rate = Column(Float, CheckConstraint("attendance_rate >= 0 AND attendance_rate <= 1.0"))
+    attendance_rate = Column(
+        Float, CheckConstraint("attendance_rate >= 0 AND attendance_rate <= 1.0")
+    )
     parent_contact = Column(String(200))
     enrollment_date = Column(Date, default=func.current_date())
     student_metadata = Column(JSON, default={})

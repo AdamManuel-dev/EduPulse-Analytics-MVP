@@ -2,17 +2,18 @@
 Unit tests for feature extractors with real database integration.
 """
 
-import pytest
 from datetime import date, timedelta
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock, Mock
 from uuid import uuid4
-import numpy as np
 
-from src.features.base import BaseFeatureExtractor
-from src.features.attendance import AttendanceFeatureExtractor
-from src.features.grades import GradeFeatureExtractor
-from src.features.discipline import DisciplineFeatureExtractor
+import numpy as np
+import pytest
+
 from src.db import models
+from src.features.attendance import AttendanceFeatureExtractor
+from src.features.base import BaseFeatureExtractor
+from src.features.discipline import DisciplineFeatureExtractor
+from src.features.grades import GradeFeatureExtractor
 
 
 class TestBaseFeatureExtractor:
@@ -156,7 +157,7 @@ class TestAttendanceFeatureExtractor:
     def test_calculate_weekly_rates_empty(self, mock_db_session):
         """Test weekly rates calculation with empty records - covers line 154."""
         extractor = AttendanceFeatureExtractor(mock_db_session)
-        
+
         # Test with empty list
         weekly_rates = extractor._calculate_weekly_attendance_rates([])
         assert weekly_rates == []  # Should return empty list
@@ -188,7 +189,9 @@ class TestGradeFeatureExtractor:
         for i in range(5):
             grade = Mock(spec=models.Grade)
             # Older dates first for proper trend calculation
-            grade.submission_date = date.today() - timedelta(days=(4-i) * 7)  # 28, 21, 14, 7, 0 days ago
+            grade.submission_date = date.today() - timedelta(
+                days=(4 - i) * 7
+            )  # 28, 21, 14, 7, 0 days ago
             grade.grade_value = 85.0 - (i * 5)  # 85, 80, 75, 70, 65 - declining over time
             grade.course_id = "MATH101"
             grade.assignment_type = "test"
@@ -302,22 +305,22 @@ class TestAttendanceFeatureExtractorIntegration:
     def test_extract_with_real_database(self, db_session, sample_student):
         """Test extraction with real database data."""
         student_id = sample_student.id
-        
+
         # Create real attendance records
         attendance_records = []
         for i in range(20):
             record_date = date.today() - timedelta(days=i)
             status = "present" if i % 3 != 0 else ("absent" if i % 2 == 0 else "tardy")
-            
+
             record = models.AttendanceRecord(
                 student_id=student_id,
                 date=record_date,
                 status=status,
-                period=1  # Add required period field
+                period=1,  # Add required period field
             )
             attendance_records.append(record)
             db_session.add(record)
-        
+
         db_session.commit()
 
         # Test feature extraction
@@ -326,15 +329,15 @@ class TestAttendanceFeatureExtractorIntegration:
 
         # Verify features are calculated correctly
         assert "attendance_rate" in features
-        assert "absence_rate" in features  
+        assert "absence_rate" in features
         assert "tardy_rate" in features
         assert features["total_days_tracked"] > 0
-        
+
         # Check that rates add up correctly
         attendance_rate = features["attendance_rate"]
         absence_rate = features["absence_rate"]
         tardy_rate = features["tardy_rate"]
-        
+
         # Rates should be between 0 and 1
         assert 0 <= attendance_rate <= 1
         assert 0 <= absence_rate <= 1
@@ -343,22 +346,22 @@ class TestAttendanceFeatureExtractorIntegration:
     def test_extract_real_stats_calculation(self, db_session, sample_student):
         """Test that rolling statistics are calculated correctly with real data."""
         student_id = sample_student.id
-        
+
         # Create attendance with known pattern (accounting for 7-day lag)
         for i in range(10):
             # Create records starting from 2 weeks ago to account for the lag
-            record_date = date.today() - timedelta(days=14 + i)  
+            record_date = date.today() - timedelta(days=14 + i)
             # Create a pattern: first 5 days present, last 5 days absent
             status = "present" if i < 5 else "absent"
-            
+
             record = models.AttendanceRecord(
                 student_id=student_id,
                 date=record_date,
                 status=status,
-                period=1  # Add required period field
+                period=1,  # Add required period field
             )
             db_session.add(record)
-        
+
         db_session.commit()
 
         extractor = AttendanceFeatureExtractor(db_session)
@@ -375,21 +378,21 @@ class TestGradeFeatureExtractorIntegration:
     def test_extract_with_real_grades(self, db_session, sample_student):
         """Test grade feature extraction with real database data."""
         student_id = sample_student.id
-        
+
         # Create real grade records with pattern (accounting for 7-day lag)
         grade_values = [75, 80, 85, 90, 95]  # Improving over time (oldest to newest)
         for i, grade_value in enumerate(grade_values):
             grade_date = date.today() - timedelta(days=42 - i * 7)  # 42, 35, 28, 21, 14 days ago
-            
+
             grade = models.Grade(
                 student_id=student_id,
                 submission_date=grade_date,
                 grade_value=grade_value,
                 course_id="MATH101",
-                assignment_type="test"
+                assignment_type="test",
             )
             db_session.add(grade)
-        
+
         db_session.commit()
 
         # Test feature extraction
@@ -406,21 +409,21 @@ class TestGradeFeatureExtractorIntegration:
     def test_gpa_calculation_real_data(self, db_session, sample_student):
         """Test GPA calculation with real grade data."""
         student_id = sample_student.id
-        
+
         # Create grades across multiple courses
         courses = ["MATH101", "ENG101", "SCI101"]
         grade_values = [85, 92, 78]
-        
+
         for course, grade_value in zip(courses, grade_values):
             grade = models.Grade(
                 student_id=student_id,
                 submission_date=date.today() - timedelta(days=14),  # Account for 7-day lag
                 grade_value=grade_value,
                 course_id=course,
-                assignment_type="final"
+                assignment_type="final",
             )
             db_session.add(grade)
-        
+
         db_session.commit()
 
         extractor = GradeFeatureExtractor(db_session)
@@ -438,24 +441,24 @@ class TestDisciplineFeatureExtractorIntegration:
     def test_extract_with_real_incidents(self, db_session, sample_student):
         """Test discipline feature extraction with real database data."""
         student_id = sample_student.id
-        
+
         # Create real discipline incidents
         incident_data = [
             (date.today() - timedelta(days=30), 1, "minor_disruption"),
             (date.today() - timedelta(days=20), 2, "defiance"),
             (date.today() - timedelta(days=10), 3, "fighting"),
         ]
-        
+
         for incident_date, severity, incident_type in incident_data:
             incident = models.DisciplineIncident(
                 student_id=student_id,
                 incident_date=incident_date,
                 incident_type=incident_type,
                 severity_level=severity,
-                description=f"Test incident: {incident_type}"
+                description=f"Test incident: {incident_type}",
             )
             db_session.add(incident)
-        
+
         db_session.commit()
 
         # Test feature extraction
@@ -473,7 +476,7 @@ class TestDisciplineFeatureExtractorIntegration:
     def test_incident_frequency_calculation(self, db_session, sample_student):
         """Test incident frequency calculation with real data."""
         student_id = sample_student.id
-        
+
         # Create incidents with specific timing to test frequency (accounting for 7-day lag)
         incident_dates = [
             date.today() - timedelta(days=70),  # Account for lag
@@ -481,17 +484,17 @@ class TestDisciplineFeatureExtractorIntegration:
             date.today() - timedelta(days=25),  # Account for lag
             date.today() - timedelta(days=15),  # Account for lag
         ]
-        
+
         for incident_date in incident_dates:
             incident = models.DisciplineIncident(
                 student_id=student_id,
                 incident_date=incident_date,
                 incident_type="test_incident",
                 severity_level=2,
-                description="Test incident for frequency"
+                description="Test incident for frequency",
             )
             db_session.add(incident)
-        
+
         db_session.commit()
 
         extractor = DisciplineFeatureExtractor(db_session)
@@ -511,73 +514,73 @@ class TestFeatureIntegrationPipeline:
         """Test complete feature extraction using all extractors."""
         student_id = sample_student.id
         reference_date = date.today()
-        
+
         # Create comprehensive test data (accounting for 7-day lag)
         # Attendance data
         for i in range(30):
             record_date = reference_date - timedelta(days=i + 20)  # Account for lag
             status = "present" if i % 4 != 0 else "absent"
-            
+
             record = models.AttendanceRecord(
                 student_id=student_id,
                 date=record_date,
                 status=status,
-                period=1  # Add required period field
+                period=1,  # Add required period field
             )
             db_session.add(record)
-        
-        # Grade data  
+
+        # Grade data
         for i in range(10):
             grade_date = reference_date - timedelta(days=i * 5 + 20)  # Account for lag
-            
+
             grade = models.Grade(
                 student_id=student_id,
                 submission_date=grade_date,
                 grade_value=85 - i * 2,  # Slightly declining grades
                 course_id=f"COURSE_{i % 3}",
-                assignment_type="test"
+                assignment_type="test",
             )
             db_session.add(grade)
-        
+
         # Discipline data
         for i in range(3):
             incident_date = reference_date - timedelta(days=i * 15 + 20)  # Account for lag
-            
+
             incident = models.DisciplineIncident(
                 student_id=student_id,
                 incident_date=incident_date,
                 incident_type="test_incident",
                 severity_level=1 + i,
-                description=f"Test incident {i}"
+                description=f"Test incident {i}",
             )
             db_session.add(incident)
-        
+
         db_session.commit()
 
         # Extract features from all extractors
         extractors = [
             AttendanceFeatureExtractor(db_session),
-            GradeFeatureExtractor(db_session), 
-            DisciplineFeatureExtractor(db_session)
+            GradeFeatureExtractor(db_session),
+            DisciplineFeatureExtractor(db_session),
         ]
-        
+
         all_features = {}
         for extractor in extractors:
             features = extractor.extract(str(student_id), reference_date)
             all_features.update(features)
-        
+
         # Verify we got features from all extractors
-        expected_feature_types = [
-            "attendance_rate", "grade_mean", "incident_count"
-        ]
-        
+        expected_feature_types = ["attendance_rate", "grade_mean", "incident_count"]
+
         for feature_type in expected_feature_types:
             assert feature_type in all_features, f"Missing {feature_type} feature"
-        
+
         # Verify all features have valid values
         for feature_name, feature_value in all_features.items():
             # Check for numeric values (including numpy types)
-            assert isinstance(feature_value, (int, float, np.integer, np.floating)), f"{feature_name} is not numeric: {feature_value} (type: {type(feature_value)})"
+            assert isinstance(
+                feature_value, (int, float, np.integer, np.floating)
+            ), f"{feature_name} is not numeric: {feature_value} (type: {type(feature_value)})"
             assert not np.isnan(float(feature_value)), f"{feature_name} is NaN"
 
 

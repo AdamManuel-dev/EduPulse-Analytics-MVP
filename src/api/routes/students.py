@@ -8,13 +8,14 @@ Constraints: Requires UUID student ID, unique district_id, SQLAlchemy session
 Patterns: FastAPI dependency injection, Pydantic validation, HTTP status codes
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 
-from src.db.database import get_db
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from src.db import models
+from src.db.database import get_db
 from src.models import schemas
 
 router = APIRouter()
@@ -167,38 +168,38 @@ async def update_student(
 async def delete_student(student_id: UUID, db: Session = Depends(get_db)):
     """
     Permanently delete a student record and all associated data.
-    
+
     Removes the student record from the database along with all related
     data including predictions, attendance records, grades, and discipline
     incidents through cascade deletion.
-    
+
     Args:
         student_id: UUID of the student to delete
         db: Database session for student lookup and deletion
-        
+
     Returns:
         dict: Confirmation message with the deleted student's district_id
-        
+
     Raises:
         HTTPException: 404 if student with the given ID is not found
-        
+
     Examples:
         >>> result = await delete_student(student_uuid, db)
         >>> print(result["message"])
         Student STU123 deleted successfully
-        
+
     Warning:
         This operation cannot be undone. All associated student data
         including predictions, grades, and attendance records will be
         permanently removed.
     """
     student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    
+
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    
+
     district_id = student.district_id
     db.delete(student)
     db.commit()
-    
+
     return {"message": f"Student {district_id} deleted successfully"}

@@ -5,26 +5,24 @@ Pytest configuration and shared fixtures for all tests.
 import sys
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Generator, Dict
-from uuid import uuid4
+from typing import Dict, Generator
+# Mock imports removed
 
-import pytest
 import numpy as np
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
-from unittest.mock import patch
+# AsyncClient removed
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.api.main import app  # noqa: E402
-from src.db.database import Base, get_db  # noqa: E402
-from src.db.models import Student, AttendanceRecord, Grade, DisciplineIncident  # noqa: E402
+# app import removed
 from src.config.settings import Settings, get_settings  # noqa: E402
+from src.db.database import Base, get_db  # noqa: E402
+from src.db.models import AttendanceRecord, DisciplineIncident, Grade, Student  # noqa: E402
 from src.models.gru_model import GRUAttentionModel  # noqa: E402
-
 
 # Test database URL
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -49,20 +47,17 @@ def test_settings() -> Settings:
 def engine():
     """Create test database engine."""
     from sqlalchemy import event
-    
-    engine = create_engine(
-        TEST_DATABASE_URL, 
-        connect_args={"check_same_thread": False}
-    )
-    
+
+    engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+
     # Enable foreign key constraints for SQLite
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
-        if 'sqlite' in engine.url.drivername:
+        if "sqlite" in engine.url.drivername:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
-    
+
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)
@@ -85,15 +80,16 @@ def client(db_session, test_settings, engine) -> TestClient:
     """Create test client with overridden dependencies."""
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
+
     from src.api.routes import health, predictions, students, training
-    
+
     # Create a test-specific FastAPI app without lifespan
     test_app = FastAPI(
         title="EduPulse Analytics API (Test)",
         description="Test version of EduPulse API",
-        version="1.0.0-test"
+        version="1.0.0-test",
     )
-    
+
     # Configure CORS
     test_app.add_middleware(
         CORSMiddleware,
@@ -102,22 +98,27 @@ def client(db_session, test_settings, engine) -> TestClient:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
     # Include routers
     test_app.include_router(health.router, tags=["health"])
     test_app.include_router(students.router, prefix="/api/v1/students", tags=["students"])
     test_app.include_router(predictions.router, prefix="/api/v1", tags=["predictions"])
     test_app.include_router(training.router, prefix="/api/v1/train", tags=["training"])
-    
+
     @test_app.get("/")
     async def root():
         """Root endpoint."""
-        return {"message": "EduPulse Analytics API (Test)", "version": "1.0.0-test", "docs": "/docs"}
-    
+        return {
+            "message": "EduPulse Analytics API (Test)",
+            "version": "1.0.0-test",
+            "docs": "/docs",
+        }
+
     # Ensure tables are created
     from src.db.database import Base
+
     Base.metadata.create_all(bind=engine)
-    
+
     def override_get_db():
         try:
             yield db_session
@@ -144,6 +145,7 @@ def client(db_session, test_settings, engine) -> TestClient:
 def sample_student(db_session) -> Student:
     """Create a sample student."""
     import uuid
+
     unique_id = str(uuid.uuid4())[:8]  # Use first 8 chars of UUID for uniqueness
     student = Student(
         district_id=f"STU{unique_id}",

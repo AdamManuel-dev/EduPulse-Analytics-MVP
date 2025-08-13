@@ -8,13 +8,14 @@ Constraints: Requires DisciplineIncident model, severity_level, incident_date, i
 Patterns: Shannon entropy for diversity, gap trend for acceleration, linear regression
 """
 
-from typing import Dict, List
 from datetime import date
-from sqlalchemy import and_
-import numpy as np
+from typing import Dict, List
 
-from src.features.base import BaseFeatureExtractor
+import numpy as np
+from sqlalchemy import and_
+
 from src.db import models
+from src.features.base import BaseFeatureExtractor
 
 
 class DisciplineFeatureExtractor(BaseFeatureExtractor):

@@ -3,17 +3,18 @@ Performance metrics collection and analysis for e2e tests
 Tracks detailed performance characteristics and generates reports
 """
 
-import time
-import psutil
-import threading
 import json
-from datetime import datetime
-from typing import Dict, List, Any, Optional, Callable
-from dataclasses import dataclass, field
-from collections import defaultdict
-import numpy as np
-from contextlib import contextmanager
 import os
+import threading
+import time
+from collections import defaultdict
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
+
+import numpy as np
+import psutil
 
 
 @dataclass

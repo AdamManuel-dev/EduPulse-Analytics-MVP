@@ -9,9 +9,9 @@ Patterns: LRU cached singleton, field validators, environment mode properties
 """
 
 from functools import lru_cache
-from typing import List, Annotated
+from typing import Annotated, List
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator, BeforeValidator
+from pydantic import BeforeValidator, Field, PostgresDsn, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     cors_origins_raw: str = Field(
         default="http://localhost:3000",
         description="CORS allowed origins (comma-separated)",
-        alias="CORS_ORIGINS"
+        alias="CORS_ORIGINS",
     )
     api_rate_limit: int = Field(default=100, description="API rate limit per minute")
 
@@ -173,7 +173,6 @@ class Settings(BaseSettings):
     # Resource Limits
     max_prediction_batch_size: int = Field(default=100, description="Maximum prediction batch size")
     max_concurrent_tasks: int = Field(default=10, description="Maximum concurrent tasks")
-
 
     @field_validator("environment")
     @classmethod
