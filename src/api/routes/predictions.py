@@ -11,7 +11,10 @@ from datetime import datetime
 from src.db.database import get_db
 from src.db import models
 from src.models import schemas
-from src.config.settings import settings
+from src.config.settings import get_settings
+from src.services.prediction_service import prediction_service
+
+settings = get_settings()
 
 router = APIRouter()
 
@@ -32,39 +35,16 @@ async def predict_single(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     
-    # TODO: Implement actual ML prediction logic
-    # For now, return mock prediction
-    mock_prediction = models.Prediction(
-        student_id=request.student_id,
-        risk_score=0.65,
-        risk_category="medium",
-        confidence=0.85,
-        risk_factors=[
-            {
-                "factor": "attendance_pattern",
-                "weight": 0.35,
-                "details": "Increasing absences in recent weeks"
-            },
-            {
-                "factor": "grade_trajectory",
-                "weight": 0.30,
-                "details": "Declining performance in core subjects"
-            }
-        ],
-        model_version=settings.model_version
-    )
-    
-    db.add(mock_prediction)
-    db.commit()
-    db.refresh(mock_prediction)
-    
-    response = schemas.PredictResponse(
-        prediction=mock_prediction,
-        contributing_factors=mock_prediction.risk_factors if request.include_factors else None,
-        timestamp=datetime.utcnow()
-    )
-    
-    return response
+    # Use real ML prediction service
+    try:
+        response = prediction_service.predict_risk(
+            student_id=str(request.student_id),
+            reference_date=request.date_range.get('end') if request.date_range else None,
+            include_factors=request.include_factors
+        )
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 @router.post("/predict/batch", response_model=schemas.BatchPredictResponse)
@@ -94,22 +74,15 @@ async def predict_batch(
             detail=f"Students not found: {missing_ids}"
         )
     
-    # TODO: Implement actual batch prediction
-    # For now, generate mock predictions
-    predictions = []
-    for idx, student_id in enumerate(request.student_ids[:request.top_k]):
-        # Mock risk scores (higher rank = higher risk)
-        risk_score = 0.9 - (idx * 0.05)
-        predictions.append({
-            "student_id": str(student_id),
-            "risk_score": risk_score,
-            "rank": idx + 1
-        })
-    
-    return schemas.BatchPredictResponse(
-        predictions=predictions,
-        processing_time_ms=123.45  # Mock processing time
-    )
+    # Use real ML prediction service for batch
+    try:
+        response = prediction_service.predict_batch(
+            student_ids=[str(sid) for sid in request.student_ids],
+            top_k=request.top_k
+        )
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch prediction failed: {str(e)}")
 
 
 @router.get("/metrics", response_model=schemas.MetricsResponse)
