@@ -9,7 +9,7 @@ Patterns: LRU cached singleton, field validators, environment mode properties
 """
 
 from functools import lru_cache
-from typing import List, Optional
+from typing import List
 
 from pydantic import Field, PostgresDsn, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,18 +18,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     Main application configuration with environment-based validation.
-    
+
     Provides comprehensive configuration management for the EduPulse application
     using Pydantic for validation and type safety. Settings are loaded from
     environment variables with fallback defaults.
-    
+
     Configuration categories include:
         - Application: Environment, debug mode, logging
-        - API: Host, port, CORS, rate limiting  
+        - API: Host, port, CORS, rate limiting
         - Database: PostgreSQL connection and pooling
         - ML: Model parameters and training settings
         - Infrastructure: Redis, Celery, monitoring
-        
+
     Examples:
         >>> settings = Settings()
         >>> print(f"Running in {settings.environment} mode")
@@ -84,36 +84,24 @@ class Settings(BaseSettings):
     # Celery
     celery_broker_url: RedisDsn
     celery_result_backend: RedisDsn
-    celery_task_time_limit: int = Field(
-        default=3600, description="Task time limit in seconds"
-    )
-    celery_task_soft_time_limit: int = Field(
-        default=3300, description="Soft time limit in seconds"
-    )
+    celery_task_time_limit: int = Field(default=3600, description="Task time limit in seconds")
+    celery_task_soft_time_limit: int = Field(default=3300, description="Soft time limit in seconds")
 
     # ML Model
     model_path: str = Field(default="/app/models", description="Model storage path")
     model_version: str = Field(default="latest", description="Model version to use")
     model_device: str = Field(default="cpu", description="Device for model inference")
     model_batch_size: int = Field(default=32, description="Batch size for inference")
-    model_max_sequence_length: int = Field(
-        default=365, description="Maximum sequence length"
-    )
+    model_max_sequence_length: int = Field(default=365, description="Maximum sequence length")
     model_learning_rate: float = Field(default=0.001, description="Learning rate")
     model_epochs: int = Field(default=100, description="Training epochs")
-    model_early_stopping_patience: int = Field(
-        default=10, description="Early stopping patience"
-    )
+    model_early_stopping_patience: int = Field(default=10, description="Early stopping patience")
 
     # Feature Engineering
-    feature_window_days: int = Field(
-        default=90, description="Feature calculation window in days"
-    )
+    feature_window_days: int = Field(default=90, description="Feature calculation window in days")
     feature_lag_days: int = Field(default=7, description="Feature lag in days")
     feature_cache_enabled: bool = Field(default=True, description="Enable feature caching")
-    feature_cache_ttl: int = Field(
-        default=86400, description="Feature cache TTL in seconds"
-    )
+    feature_cache_ttl: int = Field(default=86400, description="Feature cache TTL in seconds")
 
     # MLflow
     mlflow_tracking_uri: str = Field(
@@ -134,13 +122,9 @@ class Settings(BaseSettings):
     )
 
     # Data Ingestion
-    data_upload_max_size_mb: int = Field(
-        default=100, description="Maximum upload size in MB"
-    )
+    data_upload_max_size_mb: int = Field(default=100, description="Maximum upload size in MB")
     data_batch_size: int = Field(default=1000, description="Data processing batch size")
-    data_validation_enabled: bool = Field(
-        default=True, description="Enable data validation"
-    )
+    data_validation_enabled: bool = Field(default=True, description="Enable data validation")
 
     # Monitoring
     prometheus_port: int = Field(default=9090, description="Prometheus metrics port")
@@ -148,9 +132,7 @@ class Settings(BaseSettings):
 
     # Logging
     log_format: str = Field(default="json", description="Log format")
-    log_file_path: str = Field(
-        default="/app/logs/edupulse.log", description="Log file path"
-    )
+    log_file_path: str = Field(default="/app/logs/edupulse.log", description="Log file path")
     log_max_bytes: int = Field(default=10485760, description="Max log file size")
     log_backup_count: int = Field(default=5, description="Number of log backups")
 
@@ -159,20 +141,14 @@ class Settings(BaseSettings):
     worker_connections: int = Field(default=1000, description="Worker connections")
 
     # Feature Flags
-    enable_async_predictions: bool = Field(
-        default=True, description="Enable async predictions"
-    )
-    enable_continuous_learning: bool = Field(
-        default=True, description="Enable continuous learning"
-    )
+    enable_async_predictions: bool = Field(default=True, description="Enable async predictions")
+    enable_continuous_learning: bool = Field(default=True, description="Enable continuous learning")
     enable_model_interpretability: bool = Field(
         default=True, description="Enable model interpretability"
     )
 
     # Resource Limits
-    max_prediction_batch_size: int = Field(
-        default=100, description="Maximum prediction batch size"
-    )
+    max_prediction_batch_size: int = Field(default=100, description="Maximum prediction batch size")
     max_concurrent_tasks: int = Field(default=10, description="Maximum concurrent tasks")
 
     @field_validator("cors_origins", mode="before")
@@ -180,17 +156,17 @@ class Settings(BaseSettings):
     def parse_cors_origins(cls, v):
         """
         Parse CORS origins from comma-separated string or list.
-        
+
         Handles flexible input formats for CORS configuration, accepting
         either pre-split lists or comma-separated strings from environment
         variables.
-        
+
         Args:
             v: CORS origins as string (comma-separated) or list
-            
+
         Returns:
             list: List of trimmed origin strings
-            
+
         Examples:
             >>> parse_cors_origins("http://localhost:3000,https://app.com")
             ['http://localhost:3000', 'https://app.com']
@@ -237,14 +213,14 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """
     Get cached settings instance using LRU cache for performance.
-    
+
     Creates a singleton-like pattern for settings access while maintaining
     the ability to refresh configuration if needed. The LRU cache ensures
     settings are only parsed once per application lifecycle.
-    
+
     Returns:
         Settings: Validated and cached settings instance
-        
+
     Examples:
         >>> settings = get_settings()
         >>> settings2 = get_settings()  # Returns same cached instance

@@ -8,17 +8,17 @@ Constraints: Requires DATABASE_URL, REDIS_URL environment variables
 Patterns: Uses lifespan context for startup/shutdown, structured logging throughout
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import structlog
 from prometheus_client import make_asgi_app
 
 from src.config.settings import get_settings
-
-settings = get_settings()
 from src.api.routes import health, predictions, students, training
 from src.db.database import engine, Base
+
+settings = get_settings()
 
 
 # Configure structured logging
@@ -32,13 +32,13 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("Starting EduPulse API", environment=settings.environment)
-    
+
     # Initialize database tables
     Base.metadata.create_all(bind=engine)
     logger.info("Database initialized")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down EduPulse API")
 
@@ -48,7 +48,7 @@ app = FastAPI(
     title="EduPulse Analytics API",
     description="Temporal ML system for K-12 student success monitoring",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -76,8 +76,4 @@ async def root():
     """
     Root endpoint.
     """
-    return {
-        "message": "EduPulse Analytics API",
-        "version": "1.0.0",
-        "docs": "/docs"
-    }
+    return {"message": "EduPulse Analytics API", "version": "1.0.0", "docs": "/docs"}

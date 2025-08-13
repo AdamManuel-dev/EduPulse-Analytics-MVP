@@ -8,7 +8,7 @@ Constraints: Pydantic v2, UUID fields, field validators, from_attributes config
 Patterns: Base/Create/Update pattern, enum validation, field constraints, nested models
 """
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 from uuid import UUID
@@ -55,7 +55,7 @@ class StudentUpdate(BaseModel):
 
 class Student(StudentBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -76,7 +76,7 @@ class StudentFeatureCreate(StudentFeatureBase):
 
 class StudentFeature(StudentFeatureBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     student_id: UUID
     feature_date: date
     created_at: datetime
@@ -103,7 +103,7 @@ class PredictionCreate(PredictionBase):
 
 class Prediction(PredictionBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     student_id: UUID
     prediction_date: datetime
@@ -124,7 +124,7 @@ class TrainingFeedbackCreate(TrainingFeedbackBase):
 
 class TrainingFeedback(TrainingFeedbackBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     prediction_id: UUID
     created_at: datetime
@@ -143,7 +143,7 @@ class AttendanceRecordCreate(AttendanceRecordBase):
 
 class AttendanceRecord(AttendanceRecordBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     student_id: UUID
     created_at: datetime
@@ -165,7 +165,7 @@ class GradeCreate(GradeBase):
 
 class Grade(GradeBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     student_id: UUID
     created_at: datetime
@@ -186,7 +186,7 @@ class DisciplineIncidentCreate(DisciplineIncidentBase):
 
 class DisciplineIncident(DisciplineIncidentBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     student_id: UUID
     created_at: datetime
@@ -207,7 +207,7 @@ class ModelMetadataCreate(ModelMetadataBase):
 
 class ModelMetadata(ModelMetadataBase):
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: UUID
     training_date: datetime
     created_at: datetime

@@ -21,27 +21,24 @@ router = APIRouter()
 
 
 @router.post("/", response_model=schemas.Student)
-async def create_student(
-    student: schemas.StudentCreate,
-    db: Session = Depends(get_db)
-):
+async def create_student(student: schemas.StudentCreate, db: Session = Depends(get_db)):
     """
     Create a new student record in the system.
-    
+
     Validates that no student with the same district_id already exists,
     then creates and persists the new student record to the database.
-    
+
     Args:
         student: Student creation data including required fields like district_id,
                 first_name, last_name, and optional demographic information
         db: Database session for validation and persistence
-        
+
     Returns:
         Student: The created student record with generated UUID and timestamps
-        
+
     Raises:
         HTTPException: 400 if student with district_id already exists
-        
+
     Examples:
         >>> student_data = StudentCreate(district_id="STU123", first_name="John", last_name="Doe")
         >>> new_student = await create_student(student_data, db)
@@ -49,42 +46,39 @@ async def create_student(
         550e8400-e29b-41d4-a716-446655440000
     """
     # Check if student with district_id already exists
-    existing = db.query(models.Student).filter(
-        models.Student.district_id == student.district_id
-    ).first()
-    
+    existing = (
+        db.query(models.Student).filter(models.Student.district_id == student.district_id).first()
+    )
+
     if existing:
         raise HTTPException(status_code=400, detail="Student with this district ID already exists")
-    
+
     db_student = models.Student(**student.dict())
     db.add(db_student)
     db.commit()
     db.refresh(db_student)
-    
+
     return db_student
 
 
 @router.get("/{student_id}", response_model=schemas.Student)
-async def get_student(
-    student_id: UUID,
-    db: Session = Depends(get_db)
-):
+async def get_student(student_id: UUID, db: Session = Depends(get_db)):
     """
     Retrieve a single student record by their unique identifier.
-    
+
     Looks up a student in the database using their UUID and returns
     the complete student record if found.
-    
+
     Args:
         student_id: UUID of the student to retrieve
         db: Database session for student lookup
-        
+
     Returns:
         Student: Complete student record with all available fields
-        
+
     Raises:
         HTTPException: 404 if student with the given ID is not found
-        
+
     Examples:
         >>> student_uuid = UUID("550e8400-e29b-41d4-a716-446655440000")
         >>> student = await get_student(student_uuid, db)
@@ -92,33 +86,29 @@ async def get_student(
         STU123
     """
     student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    
+
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    
+
     return student
 
 
 @router.get("/", response_model=List[schemas.Student])
-async def list_students(
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
+async def list_students(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
     Retrieve a paginated list of all students in the system.
-    
+
     Returns student records with pagination support to handle large datasets
     efficiently. Results are ordered by creation date.
-    
+
     Args:
         skip: Number of records to skip for pagination (default: 0)
         limit: Maximum number of records to return (default: 100, max: 1000)
         db: Database session for student queries
-        
+
     Returns:
         List[Student]: List of student records within the specified range
-        
+
     Examples:
         >>> # Get first 10 students
         >>> students = await list_students(skip=0, limit=10, db=db)
@@ -133,27 +123,25 @@ async def list_students(
 
 @router.patch("/{student_id}", response_model=schemas.Student)
 async def update_student(
-    student_id: UUID,
-    student_update: schemas.StudentUpdate,
-    db: Session = Depends(get_db)
+    student_id: UUID, student_update: schemas.StudentUpdate, db: Session = Depends(get_db)
 ):
     """
     Update specific fields of an existing student record.
-    
+
     Performs a partial update using PATCH semantics, updating only the
     fields provided in the request while leaving other fields unchanged.
-    
+
     Args:
         student_id: UUID of the student to update
         student_update: Partial student data with only fields to be updated
         db: Database session for student lookup and persistence
-        
+
     Returns:
         Student: The updated student record with all current field values
-        
+
     Raises:
         HTTPException: 404 if student with the given ID is not found
-        
+
     Examples:
         >>> update_data = StudentUpdate(grade_level=11, gpa=3.8)
         >>> updated_student = await update_student(student_uuid, update_data, db)
@@ -161,15 +149,15 @@ async def update_student(
         11
     """
     student = db.query(models.Student).filter(models.Student.id == student_id).first()
-    
+
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    
+
     update_data = student_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(student, field, value)
-    
+
     db.commit()
     db.refresh(student)
-    
+
     return student
