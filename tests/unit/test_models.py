@@ -5,15 +5,18 @@ Unit tests for ML models and database models.
 import pytest
 import torch
 import numpy as np
-from datetime import date
+from datetime import date, datetime
+from uuid import uuid4
 
 from src.models.gru_model import GRUAttentionModel, EarlyStopping
 from src.models.schemas import (
     StudentCreate,
     PredictionRequest,
-    PredictionResponse,
-    TrainingConfig,
-    RiskLevel,
+    PredictResponse,
+    TrainingUpdateRequest,
+    Prediction,
+    RiskFactor,
+    RiskCategory,
 )
 from src.db.models import Student, AttendanceRecord, Grade, DisciplineIncident
 
@@ -169,7 +172,7 @@ class TestPydanticSchemas:
     def test_student_create_schema(self):
         """Test student creation schema."""
         student_data = {
-            "student_id": "STU001",
+            "district_id": "STU001",
             "first_name": "John",
             "last_name": "Doe",
             "grade_level": 10,
@@ -177,65 +180,70 @@ class TestPydanticSchemas:
             "date_of_birth": "2008-05-15",
             "gender": "M",
             "ethnicity": "White",
-            "special_ed_status": False,
-            "english_learner_status": False,
             "socioeconomic_status": "middle",
         }
 
         student = StudentCreate(**student_data)
-        assert student.student_id == "STU001"
+        assert student.district_id == "STU001"
         assert student.grade_level == 10
         assert isinstance(student.enrollment_date, date)
 
     def test_prediction_request_schema(self):
         """Test prediction request schema."""
+        test_uuid = uuid4()
         request_data = {
-            "student_id": "STU001",
-            "include_features": True,
-            "include_explanations": False,
+            "student_id": test_uuid,
+            "include_factors": True,
         }
 
         request = PredictionRequest(**request_data)
-        assert request.student_id == "STU001"
-        assert request.include_features is True
-        assert request.include_explanations is False
+        assert request.student_id == test_uuid
+        assert request.include_factors is True
 
     def test_prediction_response_schema(self):
         """Test prediction response schema."""
+        test_uuid = uuid4()
+        prediction = Prediction(
+            id=uuid4(),
+            student_id=test_uuid,
+            risk_score=0.75,
+            risk_category=RiskCategory.HIGH,
+            confidence=0.85,
+            risk_factors=[],
+            model_version="1.0.0",
+            prediction_date=datetime.utcnow(),
+            created_at=datetime.utcnow(),
+        )
+
         response_data = {
-            "student_id": "STU001",
-            "risk_score": 0.75,
-            "risk_category": "high",
-            "confidence": 0.85,
-            "timestamp": "2025-08-13T12:00:00",
+            "prediction": prediction,
+            "timestamp": datetime.utcnow(),
         }
 
-        response = PredictionResponse(**response_data)
-        assert response.student_id == "STU001"
-        assert response.risk_score == 0.75
-        assert response.risk_category == "high"
+        response = PredictResponse(**response_data)
+        assert response.prediction.student_id == test_uuid
+        assert response.prediction.risk_score == 0.75
+        assert response.prediction.risk_category == RiskCategory.HIGH
 
     def test_training_config_schema(self):
-        """Test training configuration schema."""
+        """Test training update request schema."""
         config_data = {
-            "epochs": 100,
-            "batch_size": 32,
-            "learning_rate": 0.001,
-            "early_stopping_patience": 10,
-            "validation_split": 0.2,
+            "student_outcomes": [{"student_id": str(uuid4()), "actual_outcome": "dropout"}],
+            "feedback_corrections": [{"prediction_id": str(uuid4()), "correction": "false_positive"}],
+            "update_mode": "incremental",
         }
 
-        config = TrainingConfig(**config_data)
-        assert config.epochs == 100
-        assert config.batch_size == 32
-        assert config.learning_rate == 0.001
+        config = TrainingUpdateRequest(**config_data)
+        assert config.student_outcomes[0]["actual_outcome"] == "dropout"
+        assert config.feedback_corrections[0]["correction"] == "false_positive"
+        assert config.update_mode == "incremental"
 
     def test_risk_level_enum(self):
-        """Test risk level enumeration."""
-        assert RiskLevel.LOW.value == "low"
-        assert RiskLevel.MEDIUM.value == "medium"
-        assert RiskLevel.HIGH.value == "high"
-        assert RiskLevel.CRITICAL.value == "critical"
+        """Test risk category enumeration."""
+        assert RiskCategory.LOW.value == "low"
+        assert RiskCategory.MEDIUM.value == "medium"
+        assert RiskCategory.HIGH.value == "high"
+        assert RiskCategory.CRITICAL.value == "critical"
 
 
 class TestDatabaseModels:
@@ -244,7 +252,7 @@ class TestDatabaseModels:
     def test_student_model(self, db_session):
         """Test student model creation and retrieval."""
         student = Student(
-            student_id="TEST001",
+            district_id="TEST001",
             first_name="Test",
             last_name="Student",
             grade_level=9,
@@ -252,15 +260,13 @@ class TestDatabaseModels:
             date_of_birth=date(2009, 1, 1),
             gender="F",
             ethnicity="Asian",
-            special_ed_status=False,
-            english_learner_status=True,
             socioeconomic_status="low",
         )
 
         db_session.add(student)
         db_session.commit()
 
-        retrieved = db_session.query(Student).filter_by(student_id="TEST001").first()
+        retrieved = db_session.query(Student).filter_by(district_id="TEST001").first()
         assert retrieved is not None
         assert retrieved.first_name == "Test"
         assert retrieved.grade_level == 9
@@ -268,7 +274,7 @@ class TestDatabaseModels:
     def test_attendance_record_model(self, db_session, sample_student):
         """Test attendance record model."""
         attendance = AttendanceRecord(
-            student_id=sample_student.student_id,
+            student_id=sample_student.id,
             date=date.today(),
             status="present",
             period=1,
@@ -280,7 +286,7 @@ class TestDatabaseModels:
 
         retrieved = (
             db_session.query(AttendanceRecord)
-            .filter_by(student_id=sample_student.student_id)
+            .filter_by(student_id=sample_student.id)
             .first()
         )
         assert retrieved is not None

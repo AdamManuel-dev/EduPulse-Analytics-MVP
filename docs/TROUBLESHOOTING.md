@@ -1,4 +1,30 @@
-# Troubleshooting Guide
+# EduPulse Troubleshooting Guide
+
+> **Last Updated**: 2025-08-13 02:56:19 CDT  
+> **Version**: 1.0  
+
+This comprehensive troubleshooting guide covers common issues, debugging techniques, and solutions encountered during EduPulse development, testing, and deployment.
+
+## Quick Diagnosis Checklist
+
+Before diving into specific issues, run this quick health check:
+
+```bash
+# 1. Check service health
+curl -f http://localhost:8000/health || echo "❌ API unreachable"
+
+# 2. Verify database connection  
+psql $DATABASE_URL -c "SELECT 1" > /dev/null && echo "✅ Database OK" || echo "❌ Database issue"
+
+# 3. Test Redis connectivity
+redis-cli ping | grep -q PONG && echo "✅ Redis OK" || echo "❌ Redis issue"
+
+# 4. Check Python environment
+python -c "import src.api.main; print('✅ Python imports OK')" || echo "❌ Import issue"
+
+# 5. Verify test database
+python -m pytest tests/conftest.py::test_db_connection -v || echo "❌ Test DB issue"
+```
 
 ## Common Issues and Solutions
 
@@ -465,6 +491,111 @@ pytest --cov=src --cov-report=html --cov-report=term
 open htmlcov/index.html
 ```
 
+#### E2E Tests Failing
+
+**Problem**: End-to-end tests fail with 404 errors or import issues
+
+**Common Causes & Solutions**:
+
+1. **Non-existent endpoints**:
+```bash
+# Check if endpoint exists
+curl -I http://localhost:8000/api/v1/nonexistent
+
+# Update tests to use only implemented endpoints:
+# - /health (health check)
+# - /api/v1/students/* (student CRUD)
+# - /api/v1/predict (risk prediction)
+# - /api/v1/train/* (model training)
+```
+
+2. **Missing data_generation module**:
+```bash
+# Check if module exists
+ls src/data/generation.py
+
+# If missing, either:
+# - Create the module, or
+# - Update imports in tests to use existing modules
+```
+
+3. **Database connection issues in tests**:
+```python
+# Ensure test fixtures are properly configured
+# Check tests/conftest.py for proper database setup
+# Verify test database URL in test settings
+```
+
+#### Feature Extractor Tests Failing
+
+**Problem**: Tests fail after model schema changes
+
+**Common Issues**:
+- Field name mismatches (e.g., `student_id` vs `district_id`)
+- Missing Grade model fields
+- Incorrect foreign key relationships
+
+**Solution**:
+```python
+# Check Grade model schema
+from src.db.models import Grade
+print(Grade.__table__.columns.keys())
+
+# Update test fixtures to match current schema
+# Verify field mappings in feature extraction code
+```
+
+#### Database Integration Tests
+
+**Problem**: `FOREIGN KEY constraint failed` in SQLite tests
+
+**Solution**:
+```python
+# Ensure foreign key constraints are enabled (already done in conftest.py)
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+# Use proper UUIDs for related records
+student = Student(district_id=f"STU{uuid4()[:8]}")
+attendance = AttendanceRecord(student_id=student.id, ...)
+```
+
+#### Parallel Test Execution Issues
+
+**Problem**: Tests interfere with each other when run in parallel
+
+**Solution**:
+```bash
+# Run tests sequentially for debugging
+pytest -x --disable-warnings tests/
+
+# Use test isolation with unique identifiers
+# Ensure proper cleanup in test fixtures
+```
+
+#### Mock vs Real Database Tests
+
+**Problem**: Mixing mocked and real database calls causes inconsistencies
+
+**Solution**:
+```python
+# Use consistent testing approach:
+# Option 1: Pure unit tests with mocks
+@patch('src.db.database.get_db')
+def test_with_mock_db(mock_db):
+    pass
+
+# Option 2: Integration tests with test database
+def test_with_real_db(db_session):
+    # Use actual database operations
+    pass
+
+# Avoid mixing approaches in the same test
+```
+
 ## Debugging Tools
 
 ### Logging
@@ -554,6 +685,256 @@ docker stats
 # Database monitoring
 pg_stat_statements  # Query performance
 pg_stat_user_tables  # Table statistics
+```
+
+### CI/CD Pipeline Issues
+
+#### GitHub Actions Failing
+
+**Problem**: CI pipeline fails on pull requests or pushes
+
+**Common Causes**:
+1. **Environment variable missing**:
+```yaml
+# Check .github/workflows/test.yml
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+  REDIS_URL: redis://localhost:6379/0
+```
+
+2. **Docker service not starting**:
+```yaml
+# Ensure services are properly configured
+services:
+  postgres:
+    image: postgres:15
+    env:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test_db
+    options: >-
+      --health-cmd pg_isready
+      --health-interval 10s
+      --health-timeout 5s
+      --health-retries 5
+```
+
+3. **Test dependencies not installed**:
+```bash
+# Verify all test dependencies in requirements.txt
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-asyncio>=0.20.0
+httpx>=0.24.0
+```
+
+#### Docker Build Failures
+
+**Problem**: Docker image fails to build
+
+**Solution**:
+```bash
+# Build with verbose output
+docker build --progress=plain --no-cache -t edupulse .
+
+# Check for common issues:
+# - Base image availability
+# - Copy paths in Dockerfile
+# - Missing system dependencies
+# - File permissions
+
+# Test build locally first
+docker-compose build --no-cache api
+```
+
+### Production Environment Issues
+
+#### High Latency Responses
+
+**Problem**: API responses taking >5 seconds
+
+**Diagnosis Steps**:
+```bash
+# 1. Check application metrics
+curl http://localhost:8000/metrics | grep http_request_duration
+
+# 2. Profile database queries
+SELECT query, mean_exec_time, calls 
+FROM pg_stat_statements 
+ORDER BY mean_exec_time DESC 
+LIMIT 10;
+
+# 3. Monitor system resources
+docker exec -it edupulse-api htop
+
+# 4. Check for memory leaks
+python -m memory_profiler src/api/main.py
+```
+
+**Solutions**:
+- Add database indexes for frequent queries
+- Enable query result caching with Redis
+- Implement request/response compression
+- Use async/await for I/O operations
+- Add connection pooling
+
+#### Memory Leaks
+
+**Problem**: Container memory usage continuously increasing
+
+**Diagnosis**:
+```python
+# Add memory tracking to critical functions
+from memory_profiler import profile
+
+@profile
+def memory_intensive_function():
+    # Function implementation
+    pass
+
+# Monitor garbage collection
+import gc
+print(f"Garbage collector stats: {gc.get_stats()}")
+```
+
+**Solutions**:
+- Use generators for large data processing
+- Clear caches periodically
+- Close database connections properly
+- Monitor tensor memory in PyTorch models
+
+#### SSL/TLS Certificate Issues
+
+**Problem**: HTTPS certificate errors in production
+
+**Solution**:
+```bash
+# Check certificate expiration
+openssl x509 -in /path/to/cert.pem -text -noout | grep "Not After"
+
+# Verify certificate chain
+openssl s_client -connect your-domain.com:443 -showcerts
+
+# Let's Encrypt renewal (if using certbot)
+sudo certbot renew --dry-run
+
+# Update certificate in load balancer/ingress
+kubectl get certificate -n edupulse
+kubectl describe certificate edupulse-tls -n edupulse
+```
+
+### Load Balancing and Scaling Issues
+
+#### High CPU Usage Under Load
+
+**Problem**: CPU usage spikes during peak hours
+
+**Diagnosis**:
+```bash
+# Monitor CPU usage patterns
+kubectl top pods -n edupulse
+
+# Check horizontal pod autoscaling
+kubectl get hpa -n edupulse
+
+# Profile application performance
+python -m cProfile -o profile.stats src/api/main.py
+```
+
+**Solutions**:
+```yaml
+# Increase replicas and configure HPA
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: edupulse-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: edupulse-api
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+```
+
+#### Database Connection Pool Exhaustion
+
+**Problem**: "Connection pool exhausted" errors
+
+**Solution**:
+```python
+# Adjust connection pool settings
+DATABASE_POOL_SIZE=20
+DATABASE_MAX_OVERFLOW=30
+DATABASE_POOL_TIMEOUT=30
+
+# Monitor active connections
+SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
+
+# Close idle connections
+SELECT pg_terminate_backend(pid) 
+FROM pg_stat_activity 
+WHERE state = 'idle' AND query_start < now() - interval '1 hour';
+```
+
+### Security Issues
+
+#### API Rate Limiting
+
+**Problem**: API being overwhelmed by requests
+
+**Solution**:
+```python
+# Implement rate limiting middleware
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+@app.get("/api/v1/predict")
+@limiter.limit("100/minute")
+async def predict_risk(request: Request, ...):
+    pass
+```
+
+#### Authentication Token Issues
+
+**Problem**: JWT tokens expiring unexpectedly
+
+**Diagnosis**:
+```python
+# Check token validity
+import jwt
+from datetime import datetime
+
+def debug_token(token):
+    try:
+        decoded = jwt.decode(token, verify=False)  # Don't verify for debugging
+        exp = datetime.fromtimestamp(decoded['exp'])
+        print(f"Token expires: {exp}")
+        print(f"Current time: {datetime.now()}")
+        print(f"Time remaining: {exp - datetime.now()}")
+    except Exception as e:
+        print(f"Token decode error: {e}")
+```
+
+**Solution**:
+```python
+# Adjust token expiration times
+ACCESS_TOKEN_EXPIRE_MINUTES=60  # 1 hour
+REFRESH_TOKEN_EXPIRE_DAYS=30   # 30 days
+
+# Implement token refresh endpoint
+@app.post("/auth/refresh")
+async def refresh_token(refresh_token: str):
+    # Validate and issue new access token
+    pass
 ```
 
 ## Getting Help

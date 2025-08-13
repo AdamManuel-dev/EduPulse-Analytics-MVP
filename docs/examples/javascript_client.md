@@ -1,55 +1,336 @@
 # JavaScript/React Client Examples
 
-This guide provides examples for integrating with the EduPulse Analytics API using JavaScript and React.
+This comprehensive guide demonstrates how to build modern, production-ready React applications that integrate with the EduPulse Analytics API. These examples cover everything from basic API calls to advanced real-time dashboards, error handling, and testing strategies.
 
-## Installation
+## Installation and Setup
+
+Before building your EduPulse React application, you'll need to install the required dependencies that provide HTTP client capabilities, state management, data visualization, and testing utilities.
 
 ```bash
+# Core dependencies for API integration and UI components
 npm install axios react-query recharts
-# or
+
+# Development and testing dependencies (highly recommended)
+npm install --save-dev @testing-library/react @testing-library/jest-dom @testing-library/user-event msw
+
+# Alternative package manager
 yarn add axios react-query recharts
+yarn add --dev @testing-library/react @testing-library/jest-dom @testing-library/user-event msw
+```
+
+**Package purposes:**
+- `axios`: Modern HTTP client with request/response interceptors, automatic JSON parsing, and robust error handling
+- `react-query`: Powerful data synchronization library that handles caching, background updates, and loading states
+- `recharts`: React charting library built on D3.js for creating interactive data visualizations
+- `@testing-library/react`: Testing utilities for React components with focus on user interactions
+- `msw` (Mock Service Worker): API mocking library for testing without actual server dependencies
+
+**Project structure recommendation:**
+```
+src/
+├── api/
+│   ├── client.js          # Axios configuration and interceptors
+│   ├── endpoints.js       # API endpoint definitions
+│   └── websocket.js       # WebSocket connection management
+├── components/
+│   ├── Dashboard/         # Risk assessment dashboard components
+│   ├── StudentCard/       # Individual student risk display
+│   └── Forms/             # Data input forms
+├── hooks/
+│   ├── usePrediction.js   # Custom hooks for API calls
+│   └── useAuth.js         # Authentication state management
+├── utils/
+│   ├── formatters.js      # Data formatting utilities
+│   └── constants.js       # Application constants
+└── __tests__/             # Test files
 ```
 
 ## Basic API Client
 
-### Axios Configuration
+### Production-Ready Axios Configuration
+
+The API client is the foundation of your EduPulse integration. This configuration handles authentication, error management, request/response transformation, and provides debugging capabilities for development.
 
 ```javascript
 // api/client.js
 import axios from 'axios';
 
+// Environment-based configuration for different deployment stages
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+const API_TIMEOUT = parseInt(process.env.REACT_APP_API_TIMEOUT) || 30000; // 30 seconds default
 
+/**
+ * Create the main API client with comprehensive configuration
+ * 
+ * This client handles:
+ * - Automatic authentication token management
+ * - Request/response logging in development
+ * - Error handling and retry logic
+ * - Request timeout management
+ * - Response caching headers
+ */
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,          // Prevent hanging requests
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'X-Client-Version': process.env.REACT_APP_VERSION || '1.0.0'  // For API versioning support
   },
-});
-
-// Add auth token to requests
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Handle auth errors
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    if (error.response?.status === 401) {
-      // Redirect to login or refresh token
-      localStorage.removeItem('auth_token');
-      window.location.href = '/login';
+  // Enable request/response compression
+  transformRequest: [
+    (data, headers) => {
+      // Add request timestamp for debugging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🚀 API Request:', headers['X-Request-ID'] || 'no-id', data);
+      }
+      return data ? JSON.stringify(data) : data;
     }
+  ]
+});
+
+/**
+ * Request interceptor: Adds authentication and debugging
+ * 
+ * Automatically attaches JWT tokens to all requests and provides
+ * development debugging information. Also handles request ID generation
+ * for tracing requests across the application.
+ */
+apiClient.interceptors.request.use(
+  (config) => {
+    // Generate unique request ID for debugging and logging
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    config.headers['X-Request-ID'] = requestId;
+    
+    // Add authentication token if available
+    const token = localStorage.getItem('edupulse_auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    // Add user context for server-side logging (if available)
+    const userId = localStorage.getItem('edupulse_user_id');
+    if (userId) {
+      config.headers['X-User-ID'] = userId;
+    }
+    
+    // Development debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.group(`🌐 ${config.method?.toUpperCase()} ${config.url}`);
+      console.log('Request ID:', requestId);
+      console.log('Headers:', config.headers);
+      if (config.data) console.log('Data:', config.data);
+      console.groupEnd();
+    }
+    
+    return config;
+  },
+  (error) => {
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
+/**
+ * Response interceptor: Handles authentication errors and logging
+ * 
+ * Automatically handles common error scenarios:
+ * - 401 Unauthorized: Redirects to login and clears stored tokens
+ * - 403 Forbidden: Shows permission error
+ * - 5xx Server errors: Shows user-friendly error message
+ * - Network errors: Handles offline scenarios
+ */
+apiClient.interceptors.response.use(
+  (response) => {
+    // Development response logging
+    if (process.env.NODE_ENV === 'development') {
+      const requestId = response.config.headers['X-Request-ID'];
+      console.group(`✅ Response ${response.status} (${requestId})`);
+      console.log('Data:', response.data);
+      console.log('Response time:', response.headers['x-response-time'] || 'N/A');
+      console.groupEnd();
+    }
+    
+    return response;
+  },
+  async (error) => {
+    const { response, config, message } = error;
+    
+    // Development error logging
+    if (process.env.NODE_ENV === 'development') {
+      console.group('❌ API Error');
+      console.error('Message:', message);
+      console.error('Config:', config);
+      console.error('Response:', response);
+      console.groupEnd();
+    }
+    
+    // Handle specific error scenarios
+    if (response) {
+      const { status, data } = response;
+      
+      switch (status) {
+        case 401:
+          // Unauthorized - clear auth state and redirect
+          console.warn('🔒 Authentication expired, redirecting to login');
+          localStorage.removeItem('edupulse_auth_token');
+          localStorage.removeItem('edupulse_user_id');
+          localStorage.removeItem('edupulse_user_info');
+          
+          // Dispatch custom event for auth state change
+          window.dispatchEvent(new CustomEvent('auth:logout', {
+            detail: { reason: 'token_expired', originalUrl: window.location.pathname }
+          }));
+          
+          // Only redirect if not already on login page
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login?reason=expired';
+          }
+          break;
+          
+        case 403:
+          // Forbidden - user lacks permissions
+          console.warn('🚫 Access forbidden for this resource');
+          window.dispatchEvent(new CustomEvent('api:forbidden', {
+            detail: { url: config.url, message: data.message || 'Access denied' }
+          }));
+          break;
+          
+        case 429:
+          // Rate limited - show user-friendly message
+          console.warn('⚠️ Rate limit exceeded, please slow down');
+          window.dispatchEvent(new CustomEvent('api:rateLimit', {
+            detail: { retryAfter: response.headers['retry-after'] }
+          }));
+          break;
+          
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+          // Server errors - show maintenance message
+          console.error('🚨 Server error detected');
+          window.dispatchEvent(new CustomEvent('api:serverError', {
+            detail: { status, message: data.message || 'Server temporarily unavailable' }
+          }));
+          break;
+      }
+      
+      // Enhance error object with user-friendly message
+      error.userMessage = getUserFriendlyErrorMessage(status, data);
+      
+    } else if (message === 'Network Error') {
+      // Network/connection errors
+      console.error('🌐 Network error - check internet connection');
+      window.dispatchEvent(new CustomEvent('api:networkError', {
+        detail: { message: 'Please check your internet connection and try again' }
+      }));
+      
+      error.userMessage = 'Unable to connect to EduPulse. Please check your internet connection.';
+    }
+    
+    // For development, add request details to error
+    if (process.env.NODE_ENV === 'development' && config) {
+      error.requestDetails = {
+        url: config.url,
+        method: config.method,
+        headers: config.headers,
+        data: config.data
+      };
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+/**
+ * Convert API errors to user-friendly messages
+ * 
+ * @param {number} status - HTTP status code
+ * @param {Object} data - Response data from server
+ * @returns {string} User-friendly error message
+ */
+function getUserFriendlyErrorMessage(status, data) {
+  // Try to extract message from server response
+  const serverMessage = data?.message || data?.detail || data?.error;
+  
+  switch (status) {
+    case 400:
+      return serverMessage || 'Invalid request. Please check your input and try again.';
+    case 401:
+      return 'Your session has expired. Please log in again.';
+    case 403:
+      return 'You don\'t have permission to access this information.';
+    case 404:
+      return 'The requested student or data was not found.';
+    case 429:
+      return 'You\'re making requests too quickly. Please wait a moment and try again.';
+    case 500:
+      return 'EduPulse is experiencing technical difficulties. Please try again later.';
+    case 502:
+    case 503:
+    case 504:
+      return 'EduPulse is temporarily unavailable for maintenance. Please try again in a few minutes.';
+    default:
+      return serverMessage || `An unexpected error occurred (${status}). Please contact support if this persists.`;
+  }
+}
+
+/**
+ * Convenience method for making API calls with consistent error handling
+ * 
+ * @param {string} method - HTTP method (GET, POST, PUT, DELETE)
+ * @param {string} endpoint - API endpoint path
+ * @param {Object} data - Request data (for POST/PUT)
+ * @param {Object} options - Additional axios options
+ * @returns {Promise} Axios response
+ */
+export const makeApiCall = async (method, endpoint, data = null, options = {}) => {
+  try {
+    const config = {
+      method: method.toLowerCase(),
+      url: endpoint,
+      ...options
+    };
+    
+    if (data && ['post', 'put', 'patch'].includes(config.method)) {
+      config.data = data;
+    } else if (data && config.method === 'get') {
+      config.params = data;
+    }
+    
+    const response = await apiClient(config);
+    return response.data;
+    
+  } catch (error) {
+    // Re-throw with additional context
+    const enhancedError = new Error(error.userMessage || error.message);
+    enhancedError.originalError = error;
+    enhancedError.isApiError = true;
+    throw enhancedError;
+  }
+};
+
+// Export configured client and utility functions
 export default apiClient;
+export { API_BASE_URL, getUserFriendlyErrorMessage };
+
+// Development utilities
+if (process.env.NODE_ENV === 'development') {
+  // Add global reference for debugging
+  window.__eduPulseApiClient = apiClient;
+  
+  // Add network monitoring
+  window.addEventListener('online', () => {
+    console.log('🌐 Connection restored');
+    window.dispatchEvent(new CustomEvent('api:online'));
+  });
+  
+  window.addEventListener('offline', () => {
+    console.log('🌐 Connection lost');
+    window.dispatchEvent(new CustomEvent('api:offline'));
+  });
+}
 ```
 
 ## React Hooks

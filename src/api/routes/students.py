@@ -1,9 +1,9 @@
 """
 @fileoverview Student CRUD API endpoints for managing student records
-@lastmodified 2025-08-13T00:50:05-05:00
+@lastmodified 2025-08-13T02:56:19-05:00
 
-Features: Create, read, update student records with validation and pagination
-Main APIs: create_student(), get_student(), list_students(), update_student()
+Features: Create, read, update, delete student records with validation and pagination
+Main APIs: create_student(), get_student(), list_students(), update_student(), delete_student()
 Constraints: Requires UUID student ID, unique district_id, SQLAlchemy session
 Patterns: FastAPI dependency injection, Pydantic validation, HTTP status codes
 """
@@ -161,3 +161,44 @@ async def update_student(
     db.refresh(student)
 
     return student
+
+
+@router.delete("/{student_id}")
+async def delete_student(student_id: UUID, db: Session = Depends(get_db)):
+    """
+    Permanently delete a student record and all associated data.
+    
+    Removes the student record from the database along with all related
+    data including predictions, attendance records, grades, and discipline
+    incidents through cascade deletion.
+    
+    Args:
+        student_id: UUID of the student to delete
+        db: Database session for student lookup and deletion
+        
+    Returns:
+        dict: Confirmation message with the deleted student's district_id
+        
+    Raises:
+        HTTPException: 404 if student with the given ID is not found
+        
+    Examples:
+        >>> result = await delete_student(student_uuid, db)
+        >>> print(result["message"])
+        Student STU123 deleted successfully
+        
+    Warning:
+        This operation cannot be undone. All associated student data
+        including predictions, grades, and attendance records will be
+        permanently removed.
+    """
+    student = db.query(models.Student).filter(models.Student.id == student_id).first()
+    
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    district_id = student.district_id
+    db.delete(student)
+    db.commit()
+    
+    return {"message": f"Student {district_id} deleted successfully"}

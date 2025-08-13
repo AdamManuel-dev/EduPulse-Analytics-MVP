@@ -1,6 +1,6 @@
 """
 @fileoverview Health check and readiness endpoints for monitoring infrastructure
-@lastmodified 2025-08-13T00:50:05-05:00
+@lastmodified 2025-08-13T02:56:19-05:00
 
 Features: Basic health check, readiness probe, database/Redis connectivity checks
 Main APIs: health_check(), readiness_check()

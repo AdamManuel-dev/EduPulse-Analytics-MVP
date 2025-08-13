@@ -1,6 +1,6 @@
 """
 @fileoverview Abstract base class for feature extractors with common utilities
-@lastmodified 2025-08-13T00:50:05-05:00
+@lastmodified 2025-08-13T02:56:19-05:00
 
 Features: BaseFeatureExtractor, rolling statistics, pattern analysis, date range calculation
 Main APIs: extract(), get_feature_names(), calculate_rolling_stats(), calculate_pattern_features()

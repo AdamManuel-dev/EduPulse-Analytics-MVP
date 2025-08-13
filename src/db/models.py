@@ -25,20 +25,67 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.types import TypeDecorator, CHAR
 import uuid
 
 from .database import Base
 
 
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+    
+    Uses PostgreSQL's UUID type on PostgreSQL, otherwise uses
+    CHAR(32) to store UUIDs as hex strings.
+    """
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(UUID())
+        else:
+            return dialect.type_descriptor(CHAR(32))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return str(value)
+        else:
+            if not isinstance(value, uuid.UUID):
+                return "%.32x" % uuid.UUID(value).int
+            else:
+                return "%.32x" % value.int
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        else:
+            if not isinstance(value, uuid.UUID):
+                return uuid.UUID(value)
+            else:
+                return value
+
+
 class Student(Base):
     __tablename__ = "students"
-    __table_args__ = {"schema": "edupulse"}
+    # Use schema only for PostgreSQL (skip for SQLite tests)
+    __table_args__ = {}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     district_id = Column(String(50), unique=True, nullable=False)
+    first_name = Column(String(100), nullable=False)
+    last_name = Column(String(100), nullable=False)
     grade_level = Column(Integer, CheckConstraint("grade_level >= 0 AND grade_level <= 12"))
-    enrollment_date = Column(Date, nullable=False)
-    metadata = Column(JSON, default={})
+    date_of_birth = Column(Date, nullable=False)
+    gender = Column(String(10))
+    ethnicity = Column(String(100))
+    socioeconomic_status = Column(String(50))
+    gpa = Column(Float, CheckConstraint("gpa >= 0 AND gpa <= 4.0"))
+    attendance_rate = Column(Float, CheckConstraint("attendance_rate >= 0 AND attendance_rate <= 1.0"))
+    parent_contact = Column(String(200))
+    enrollment_date = Column(Date, default=func.current_date())
+    student_metadata = Column(JSON, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -58,16 +105,16 @@ class Student(Base):
 
 class StudentFeature(Base):
     __tablename__ = "student_features"
-    __table_args__ = (UniqueConstraint("student_id", "feature_date"), {"schema": "edupulse"})
+    __table_args__ = (UniqueConstraint("student_id", "feature_date"),)
 
-    student_id = Column(UUID(as_uuid=True), ForeignKey("edupulse.students.id"), primary_key=True)
+    student_id = Column(GUID(), ForeignKey("students.id"), primary_key=True)
     feature_date = Column(Date, primary_key=True, nullable=False)
     attendance_rate = Column(
         Float, CheckConstraint("attendance_rate >= 0 AND attendance_rate <= 1")
     )
     gpa_current = Column(Float, CheckConstraint("gpa_current >= 0 AND gpa_current <= 5"))
     discipline_incidents = Column(Integer, CheckConstraint("discipline_incidents >= 0"), default=0)
-    feature_vector = Column(ARRAY(Float))
+    feature_vector = Column(JSON)  # Use JSON instead of ARRAY for SQLite compatibility
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
@@ -76,10 +123,11 @@ class StudentFeature(Base):
 
 class Prediction(Base):
     __tablename__ = "predictions"
-    __table_args__ = {"schema": "edupulse"}
+    # Use schema only for PostgreSQL (skip for SQLite tests)
+    __table_args__ = {}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    student_id = Column(UUID(as_uuid=True), ForeignKey("edupulse.students.id"))
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    student_id = Column(GUID(), ForeignKey("students.id"))
     prediction_date = Column(DateTime(timezone=True), server_default=func.now())
     risk_score = Column(Float, CheckConstraint("risk_score >= 0 AND risk_score <= 1"))
     risk_category = Column(
@@ -99,10 +147,11 @@ class Prediction(Base):
 
 class TrainingFeedback(Base):
     __tablename__ = "training_feedback"
-    __table_args__ = {"schema": "edupulse"}
+    # Use schema only for PostgreSQL (skip for SQLite tests)
+    __table_args__ = {}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    prediction_id = Column(UUID(as_uuid=True), ForeignKey("edupulse.predictions.id"))
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    prediction_id = Column(GUID(), ForeignKey("predictions.id"))
     outcome_date = Column(Date)
     outcome_type = Column(String(50))
     feedback_type = Column(
@@ -120,10 +169,10 @@ class TrainingFeedback(Base):
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
-    __table_args__ = (UniqueConstraint("student_id", "date", "period"), {"schema": "edupulse"})
+    __table_args__ = (UniqueConstraint("student_id", "date", "period"),)
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    student_id = Column(UUID(as_uuid=True), ForeignKey("edupulse.students.id"))
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    student_id = Column(GUID(), ForeignKey("students.id"))
     date = Column(Date, nullable=False)
     status = Column(
         String(20), CheckConstraint("status IN ('present', 'absent', 'tardy', 'excused')")
@@ -137,10 +186,11 @@ class AttendanceRecord(Base):
 
 class Grade(Base):
     __tablename__ = "grades"
-    __table_args__ = {"schema": "edupulse"}
+    # Use schema only for PostgreSQL (skip for SQLite tests)
+    __table_args__ = {}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    student_id = Column(UUID(as_uuid=True), ForeignKey("edupulse.students.id"))
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    student_id = Column(GUID(), ForeignKey("students.id"))
     course_id = Column(String(50), nullable=False)
     course_name = Column(String(200))
     grade_value = Column(Float, CheckConstraint("grade_value >= 0 AND grade_value <= 100"))
@@ -155,10 +205,11 @@ class Grade(Base):
 
 class DisciplineIncident(Base):
     __tablename__ = "discipline_incidents"
-    __table_args__ = {"schema": "edupulse"}
+    # Use schema only for PostgreSQL (skip for SQLite tests)
+    __table_args__ = {}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    student_id = Column(UUID(as_uuid=True), ForeignKey("edupulse.students.id"))
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
+    student_id = Column(GUID(), ForeignKey("students.id"))
     incident_date = Column(Date, nullable=False)
     severity_level = Column(Integer, CheckConstraint("severity_level >= 1 AND severity_level <= 5"))
     incident_type = Column(String(100))
@@ -172,9 +223,10 @@ class DisciplineIncident(Base):
 
 class ModelMetadata(Base):
     __tablename__ = "model_metadata"
-    __table_args__ = {"schema": "edupulse"}
+    # Use schema only for PostgreSQL (skip for SQLite tests)
+    __table_args__ = {}
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID(), primary_key=True, default=uuid.uuid4)
     model_version = Column(String(50), unique=True, nullable=False)
     model_type = Column(String(50))
     training_date = Column(DateTime(timezone=True), server_default=func.now())

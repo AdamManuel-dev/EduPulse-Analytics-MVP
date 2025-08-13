@@ -1,6 +1,6 @@
 """
 @fileoverview Model training pipeline with PyTorch dataset and trainer classes
-@lastmodified 2025-08-13T00:50:05-05:00
+@lastmodified 2025-08-13T02:56:19-05:00
 
 Features: StudentSequenceDataset, ModelTrainer, epoch training/validation, early stopping
 Main APIs: StudentSequenceDataset(), ModelTrainer(), fit(), save_model(), load_model()

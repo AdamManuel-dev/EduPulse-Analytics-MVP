@@ -9,10 +9,30 @@ Patterns: LRU cached singleton, field validators, environment mode properties
 """
 
 from functools import lru_cache
-from typing import List
+from typing import List, Annotated
 
-from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator, BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def parse_cors_origins(v):
+    """Parse CORS origins from comma-separated string or list."""
+    if v is None or v == "":
+        return ["http://localhost:3000"]  # Default fallback
+    if isinstance(v, str):
+        # Handle comma-separated string
+        origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+        return origins if origins else ["http://localhost:3000"]
+    if isinstance(v, list):
+        return v
+    # If it's some other type, try to convert to string first
+    try:
+        return [str(v).strip()] if str(v).strip() else ["http://localhost:3000"]
+    except Exception:
+        return ["http://localhost:3000"]
+
+
+CorsOrigins = Annotated[List[str], BeforeValidator(parse_cors_origins)]
 
 
 class Settings(BaseSettings):
@@ -42,6 +62,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # Ignore extra fields from environment
+        protected_namespaces=("settings_",),  # Avoid model_ namespace warnings
     )
 
     # Application
@@ -55,9 +77,10 @@ class Settings(BaseSettings):
     api_port: int = Field(default=8000, description="API port")
     api_version: str = Field(default="v1", description="API version")
     api_prefix: str = Field(default="/api", description="API prefix")
-    cors_origins: List[str] = Field(
-        default_factory=lambda: ["http://localhost:3000"],
-        description="CORS allowed origins",
+    cors_origins_raw: str = Field(
+        default="http://localhost:3000",
+        description="CORS allowed origins (comma-separated)",
+        alias="CORS_ORIGINS"
     )
     api_rate_limit: int = Field(default=100, description="API rate limit per minute")
 
@@ -151,29 +174,6 @@ class Settings(BaseSettings):
     max_prediction_batch_size: int = Field(default=100, description="Maximum prediction batch size")
     max_concurrent_tasks: int = Field(default=10, description="Maximum concurrent tasks")
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        """
-        Parse CORS origins from comma-separated string or list.
-
-        Handles flexible input formats for CORS configuration, accepting
-        either pre-split lists or comma-separated strings from environment
-        variables.
-
-        Args:
-            v: CORS origins as string (comma-separated) or list
-
-        Returns:
-            list: List of trimmed origin strings
-
-        Examples:
-            >>> parse_cors_origins("http://localhost:3000,https://app.com")
-            ['http://localhost:3000', 'https://app.com']
-        """
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
 
     @field_validator("environment")
     @classmethod
@@ -192,6 +192,11 @@ class Settings(BaseSettings):
         if v.upper() not in allowed:
             raise ValueError(f"Log level must be one of {allowed}")
         return v.upper()
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Parse CORS origins from the raw string."""
+        return parse_cors_origins(self.cors_origins_raw)
 
     @property
     def is_development(self) -> bool:

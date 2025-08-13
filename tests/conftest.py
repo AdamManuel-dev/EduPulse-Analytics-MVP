@@ -13,6 +13,8 @@ import numpy as np
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from unittest.mock import patch
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -32,11 +34,13 @@ TEST_DATABASE_URL = "sqlite:///:memory:"
 def test_settings() -> Settings:
     """Override settings for testing."""
     return Settings(
-        database_url=TEST_DATABASE_URL,
+        database_url="postgresql://user:pass@localhost/testdb",  # Valid postgres URL for validation
         redis_url="redis://localhost:6379/15",  # Use test redis db
-        environment="test",
+        environment="testing",  # Valid environment value
         secret_key="test-secret-key-for-testing-only",
-        ml_model_path="models/test_model.pt",
+        jwt_secret_key="test-jwt-secret-key-for-testing-only",
+        celery_broker_url="redis://localhost:6379/15",
+        celery_result_backend="redis://localhost:6379/15",
         log_level="DEBUG",
     )
 
@@ -44,7 +48,21 @@ def test_settings() -> Settings:
 @pytest.fixture(scope="session")
 def engine():
     """Create test database engine."""
-    engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
+    from sqlalchemy import event
+    
+    engine = create_engine(
+        TEST_DATABASE_URL, 
+        connect_args={"check_same_thread": False}
+    )
+    
+    # Enable foreign key constraints for SQLite
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        if 'sqlite' in engine.url.drivername:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+    
     Base.metadata.create_all(bind=engine)
     yield engine
     Base.metadata.drop_all(bind=engine)
@@ -63,9 +81,43 @@ def db_session(engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture(scope="function")
-def client(db_session, test_settings) -> TestClient:
+def client(db_session, test_settings, engine) -> TestClient:
     """Create test client with overridden dependencies."""
-
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    from src.api.routes import health, predictions, students, training
+    
+    # Create a test-specific FastAPI app without lifespan
+    test_app = FastAPI(
+        title="EduPulse Analytics API (Test)",
+        description="Test version of EduPulse API",
+        version="1.0.0-test"
+    )
+    
+    # Configure CORS
+    test_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    # Include routers
+    test_app.include_router(health.router, tags=["health"])
+    test_app.include_router(students.router, prefix="/api/v1/students", tags=["students"])
+    test_app.include_router(predictions.router, prefix="/api/v1", tags=["predictions"])
+    test_app.include_router(training.router, prefix="/api/v1/train", tags=["training"])
+    
+    @test_app.get("/")
+    async def root():
+        """Root endpoint."""
+        return {"message": "EduPulse Analytics API (Test)", "version": "1.0.0-test", "docs": "/docs"}
+    
+    # Ensure tables are created
+    from src.db.database import Base
+    Base.metadata.create_all(bind=engine)
+    
     def override_get_db():
         try:
             yield db_session
@@ -75,20 +127,26 @@ def client(db_session, test_settings) -> TestClient:
     def override_get_settings():
         return test_settings
 
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_settings] = override_get_settings
+    # Override dependencies
+    test_app.dependency_overrides[get_db] = override_get_db
+    test_app.dependency_overrides[get_settings] = override_get_settings
 
-    with TestClient(app) as test_client:
+    with TestClient(test_app) as test_client:
         yield test_client
 
-    app.dependency_overrides.clear()
+    test_app.dependency_overrides.clear()
+
+
+# Remove async_client since we're using the standard client for e2e tests
 
 
 @pytest.fixture
 def sample_student(db_session) -> Student:
     """Create a sample student."""
+    import uuid
+    unique_id = str(uuid.uuid4())[:8]  # Use first 8 chars of UUID for uniqueness
     student = Student(
-        student_id=str(uuid4()),
+        district_id=f"STU{unique_id}",
         first_name="Test",
         last_name="Student",
         grade_level=10,
@@ -96,8 +154,6 @@ def sample_student(db_session) -> Student:
         date_of_birth=date(2008, 5, 15),
         gender="M",
         ethnicity="Hispanic",
-        special_ed_status=False,
-        english_learner_status=False,
         socioeconomic_status="middle",
     )
     db_session.add(student)
@@ -117,12 +173,10 @@ def sample_attendance_records(db_session, sample_student) -> list[AttendanceReco
         )
 
         record = AttendanceRecord(
-            student_id=sample_student.student_id,
+            student_id=sample_student.id,
             date=date_val,
             status=status,
             period=1,
-            minutes_late=5 if status == "tardy" else 0,
-            reason="illness" if status == "excused" else None,
         )
         records.append(record)
         db_session.add(record)
@@ -141,15 +195,11 @@ def sample_grades(db_session, sample_student) -> list[Grade]:
     for course in courses:
         for i in range(10):
             grade = Grade(
-                student_id=sample_student.student_id,
+                student_id=sample_student.id,
                 course_id=course,
-                assignment_id=f"{course}_assign_{i}",
                 assignment_type=np.random.choice(assignment_types),
                 grade_value=np.random.uniform(60, 100),
-                max_grade_value=100.0,
                 submission_date=date.today() - timedelta(days=i * 7),
-                semester="Fall 2024",
-                academic_year="2024-2025",
             )
             grades.append(grade)
             db_session.add(grade)
@@ -166,13 +216,11 @@ def sample_discipline_incidents(db_session, sample_student) -> list[DisciplineIn
 
     for i in range(5):
         incident = DisciplineIncident(
-            student_id=sample_student.student_id,
+            student_id=sample_student.id,
             incident_date=date.today() - timedelta(days=i * 30),
             incident_type=np.random.choice(incident_types),
             severity_level=np.random.randint(1, 4),
             description=f"Test incident {i}",
-            action_taken="Warning",
-            reported_by="Teacher",
         )
         incidents.append(incident)
         db_session.add(incident)
@@ -210,7 +258,7 @@ def batch_students(db_session) -> list[Student]:
     students = []
     for i in range(10):
         student = Student(
-            student_id=f"STU{i:05d}",
+            district_id=f"STU{i:05d}",
             first_name=f"Student{i}",
             last_name="Test",
             grade_level=9 + (i % 4),
@@ -218,8 +266,6 @@ def batch_students(db_session) -> list[Student]:
             date_of_birth=date(2008 + (i % 3), (i % 12) + 1, (i % 28) + 1),
             gender="M" if i % 2 == 0 else "F",
             ethnicity=np.random.choice(["White", "Black", "Hispanic", "Asian"]),
-            special_ed_status=i % 5 == 0,
-            english_learner_status=i % 4 == 0,
             socioeconomic_status=np.random.choice(["low", "middle", "high"]),
         )
         students.append(student)

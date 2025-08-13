@@ -39,24 +39,42 @@ class FeedbackType(str, Enum):
 # Base schemas
 class StudentBase(BaseModel):
     district_id: str = Field(..., max_length=50)
+    first_name: str = Field(..., max_length=100)
+    last_name: str = Field(..., max_length=100)
     grade_level: int = Field(..., ge=0, le=12)
-    enrollment_date: date
-    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    date_of_birth: date
+    gender: Optional[str] = Field(None, max_length=10)
+    ethnicity: Optional[str] = Field(None, max_length=100)
+    socioeconomic_status: Optional[str] = Field(None, max_length=50)
+    gpa: Optional[float] = Field(None, ge=0, le=4.0)
+    attendance_rate: Optional[float] = Field(None, ge=0, le=1.0)
+    parent_contact: Optional[str] = Field(None, max_length=200)
+    student_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 class StudentCreate(StudentBase):
-    pass
+    enrollment_date: Optional[date] = None
 
 
 class StudentUpdate(BaseModel):
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
     grade_level: Optional[int] = Field(None, ge=0, le=12)
-    metadata: Optional[Dict[str, Any]] = None
+    date_of_birth: Optional[date] = None
+    gender: Optional[str] = Field(None, max_length=10)
+    ethnicity: Optional[str] = Field(None, max_length=100)
+    socioeconomic_status: Optional[str] = Field(None, max_length=50)
+    gpa: Optional[float] = Field(None, ge=0, le=4.0)
+    attendance_rate: Optional[float] = Field(None, ge=0, le=1.0)
+    parent_contact: Optional[str] = Field(None, max_length=200)
+    student_metadata: Optional[Dict[str, Any]] = None
 
 
 class Student(StudentBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    enrollment_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime
 
@@ -251,3 +269,17 @@ class TrainingUpdateResponse(BaseModel):
 class MetricsResponse(BaseModel):
     performance_metrics: Dict[str, float]
     data_coverage: Dict[str, int]
+
+
+# Legacy alias schemas for backward compatibility
+PredictionRequest = PredictRequest
+PredictionResponse = PredictResponse
+TrainingConfig = TrainingUpdateRequest
+
+
+class RiskLevel(str, Enum):
+    """Legacy enum for risk level (use RiskCategory instead)."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
