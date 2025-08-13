@@ -106,7 +106,6 @@ dmypy.json
 
 # IDE
 .idea/
-.vscode/
 *.swp
 *.swo
 *~

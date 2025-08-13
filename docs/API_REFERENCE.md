@@ -6,7 +6,7 @@ The EduPulse Analytics API provides RESTful endpoints for student risk predictio
 
 ## Base URL
 
-```
+```text
 http://localhost:8000/api/v1
 ```
 
@@ -14,7 +14,7 @@ http://localhost:8000/api/v1
 
 The API uses JWT (JSON Web Token) authentication. Include the token in the Authorization header:
 
-```
+```text
 Authorization: Bearer <your-token>
 ```
 
@@ -459,7 +459,7 @@ Retrieve system and model metrics.
 
 Rate limit headers:
 
-```
+```text
 X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1629843600
@@ -555,4 +555,6 @@ For API support:
 
 ---
 
-*Last updated: 2025-08-13*
+### Last Updated
+
+2025-08-13

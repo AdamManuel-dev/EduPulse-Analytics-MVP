@@ -1,0 +1,129 @@
+name: Lint Code
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-markdown:
+    name: Lint Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Lint Markdown files
+        uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: |
+            **/*.md
+            !**/node_modules/**
+            !**/venv/**
+
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy pylint
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Lint with flake8
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 src tests --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 src tests --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Check formatting with black
+        run: |
+          black --check --diff src tests
+
+      - name: Check import sorting with isort
+        run: |
+          isort --check-only --diff src tests
+
+      - name: Type check with mypy
+        run: |
+          mypy src --ignore-missing-imports --no-strict-optional
+        continue-on-error: true
+
+      - name: Lint with pylint
+        run: |
+          pylint src --fail-under=8.0 || true
+
+  check-yaml:
+    name: Check YAML
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check YAML syntax
+        run: |
+          python -m pip install pyyaml
+          find . -name "*.yml" -o -name "*.yaml" | xargs python -c "import yaml, sys; [yaml.safe_load(open(f)) for f in sys.argv[1:]]"
+
+  check-json:
+    name: Check JSON
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate JSON syntax
+        run: |
+          find . -name "*.json" -not -path "*/node_modules/*" -not -path "*/venv/*" | xargs -I {} python -m json.tool {} /dev/null
+
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run Bandit security linter
+        run: |
+          bandit -r src -f json -o bandit-report.json || true
+          if [ -f bandit-report.json ]; then
+            python -c "import json; data=json.load(open('bandit-report.json')); print(f'Security issues found: {len(data.get(\"results\", []))}')"
+          fi
+
+      - name: Check dependencies for vulnerabilities
+        run: |
+          safety check --json || true
+        continue-on-error: true
