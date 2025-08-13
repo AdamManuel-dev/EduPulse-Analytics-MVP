@@ -1,0 +1,14 @@
+# Include base requirements
+-r requirements.txt
+
+# Additional development tools
+autopep8==2.0.4
+pylint==3.0.3
+bandit==1.7.5
+safety==3.0.1
+pytest-mock==3.12.0
+pytest-benchmark==4.0.0
+pytest-xdist==3.5.0
+factory-boy==3.3.0
+faker==21.0.0
+testcontainers[postgres]==3.7.1

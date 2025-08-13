@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: edupulse-postgres
+    environment:
+      POSTGRES_DB: edupulse
+      POSTGRES_USER: edupulse_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-development_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=en_US.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edupulse_user -d edupulse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edupulse-network
+
+  # Redis for caching and task queue
+  redis:
+    image: redis:7-alpine
+    container_name: edupulse-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edupulse-network
+
+  # API Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edupulse-api
+    environment:
+      DATABASE_URL: postgresql://edupulse_user:${DB_PASSWORD:-development_password}@postgres:5432/edupulse
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+      PYTHONPATH: /app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - edupulse-network
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edupulse-celery-worker
+    environment:
+      DATABASE_URL: postgresql://edupulse_user:${DB_PASSWORD:-development_password}@postgres:5432/edupulse
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+      PYTHONPATH: /app
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "src.async_tasks.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    networks:
+      - edupulse-network
+
+  # Celery Beat (Scheduler)
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edupulse-celery-beat
+    environment:
+      DATABASE_URL: postgresql://edupulse_user:${DB_PASSWORD:-development_password}@postgres:5432/edupulse
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+      PYTHONPATH: /app
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["celery", "-A", "src.async_tasks.celery_app", "beat", "--loglevel=info"]
+    networks:
+      - edupulse-network
+
+  # Flower (Celery Monitoring)
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edupulse-flower
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      FLOWER_PORT: 5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      - redis
+    command: ["celery", "-A", "src.async_tasks.celery_app", "flower", "--port=5555"]
+    networks:
+      - edupulse-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  edupulse-network:
+    driver: bridge

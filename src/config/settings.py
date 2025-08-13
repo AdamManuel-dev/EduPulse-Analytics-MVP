@@ -1,0 +1,201 @@
+"""
+Application settings using Pydantic for validation and type checking.
+"""
+
+from functools import lru_cache
+from typing import List, Optional
+
+from pydantic import Field, PostgresDsn, RedisDsn, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Main application settings."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    # Application
+    environment: str = Field(default="development", description="Application environment")
+    debug: bool = Field(default=False, description="Debug mode")
+    log_level: str = Field(default="INFO", description="Logging level")
+    secret_key: str = Field(..., description="Application secret key")
+
+    # API Configuration
+    api_host: str = Field(default="0.0.0.0", description="API host")
+    api_port: int = Field(default=8000, description="API port")
+    api_version: str = Field(default="v1", description="API version")
+    api_prefix: str = Field(default="/api", description="API prefix")
+    cors_origins: List[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+        description="CORS allowed origins",
+    )
+    api_rate_limit: int = Field(default=100, description="API rate limit per minute")
+
+    # Database
+    database_url: PostgresDsn
+    db_pool_size: int = Field(default=20, description="Database connection pool size")
+    db_max_overflow: int = Field(default=40, description="Maximum overflow connections")
+    db_pool_timeout: int = Field(default=30, description="Pool timeout in seconds")
+    db_echo: bool = Field(default=False, description="Echo SQL statements")
+
+    # TimescaleDB
+    timescale_chunk_time_interval: str = Field(
+        default="7d", description="TimescaleDB chunk time interval"
+    )
+    timescale_compression_after: str = Field(
+        default="30d", description="Compress data after this period"
+    )
+
+    # Redis
+    redis_url: RedisDsn
+    redis_max_connections: int = Field(default=50, description="Redis max connections")
+    cache_ttl: int = Field(default=3600, description="Default cache TTL in seconds")
+
+    # Celery
+    celery_broker_url: RedisDsn
+    celery_result_backend: RedisDsn
+    celery_task_time_limit: int = Field(
+        default=3600, description="Task time limit in seconds"
+    )
+    celery_task_soft_time_limit: int = Field(
+        default=3300, description="Soft time limit in seconds"
+    )
+
+    # ML Model
+    model_path: str = Field(default="/app/models", description="Model storage path")
+    model_version: str = Field(default="latest", description="Model version to use")
+    model_device: str = Field(default="cpu", description="Device for model inference")
+    model_batch_size: int = Field(default=32, description="Batch size for inference")
+    model_max_sequence_length: int = Field(
+        default=365, description="Maximum sequence length"
+    )
+    model_learning_rate: float = Field(default=0.001, description="Learning rate")
+    model_epochs: int = Field(default=100, description="Training epochs")
+    model_early_stopping_patience: int = Field(
+        default=10, description="Early stopping patience"
+    )
+
+    # Feature Engineering
+    feature_window_days: int = Field(
+        default=90, description="Feature calculation window in days"
+    )
+    feature_lag_days: int = Field(default=7, description="Feature lag in days")
+    feature_cache_enabled: bool = Field(default=True, description="Enable feature caching")
+    feature_cache_ttl: int = Field(
+        default=86400, description="Feature cache TTL in seconds"
+    )
+
+    # MLflow
+    mlflow_tracking_uri: str = Field(
+        default="http://localhost:5000", description="MLflow tracking URI"
+    )
+    mlflow_experiment_name: str = Field(
+        default="edupulse-experiments", description="MLflow experiment name"
+    )
+
+    # JWT
+    jwt_secret_key: str = Field(..., description="JWT secret key")
+    jwt_algorithm: str = Field(default="HS256", description="JWT algorithm")
+    jwt_access_token_expire_minutes: int = Field(
+        default=30, description="Access token expiry in minutes"
+    )
+    jwt_refresh_token_expire_days: int = Field(
+        default=7, description="Refresh token expiry in days"
+    )
+
+    # Data Ingestion
+    data_upload_max_size_mb: int = Field(
+        default=100, description="Maximum upload size in MB"
+    )
+    data_batch_size: int = Field(default=1000, description="Data processing batch size")
+    data_validation_enabled: bool = Field(
+        default=True, description="Enable data validation"
+    )
+
+    # Monitoring
+    prometheus_port: int = Field(default=9090, description="Prometheus metrics port")
+    metrics_enabled: bool = Field(default=True, description="Enable metrics collection")
+
+    # Logging
+    log_format: str = Field(default="json", description="Log format")
+    log_file_path: str = Field(
+        default="/app/logs/edupulse.log", description="Log file path"
+    )
+    log_max_bytes: int = Field(default=10485760, description="Max log file size")
+    log_backup_count: int = Field(default=5, description="Number of log backups")
+
+    # Performance
+    request_timeout: int = Field(default=30, description="Request timeout in seconds")
+    worker_connections: int = Field(default=1000, description="Worker connections")
+
+    # Feature Flags
+    enable_async_predictions: bool = Field(
+        default=True, description="Enable async predictions"
+    )
+    enable_continuous_learning: bool = Field(
+        default=True, description="Enable continuous learning"
+    )
+    enable_model_interpretability: bool = Field(
+        default=True, description="Enable model interpretability"
+    )
+
+    # Resource Limits
+    max_prediction_batch_size: int = Field(
+        default=100, description="Maximum prediction batch size"
+    )
+    max_concurrent_tasks: int = Field(default=10, description="Maximum concurrent tasks")
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from comma-separated string."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
+
+    @field_validator("environment")
+    @classmethod
+    def validate_environment(cls, v):
+        """Validate environment value."""
+        allowed = ["development", "staging", "production", "testing"]
+        if v not in allowed:
+            raise ValueError(f"Environment must be one of {allowed}")
+        return v
+
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, v):
+        """Validate log level."""
+        allowed = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+        if v.upper() not in allowed:
+            raise ValueError(f"Log level must be one of {allowed}")
+        return v.upper()
+
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development mode."""
+        return self.environment == "development"
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production mode."""
+        return self.environment == "production"
+
+    @property
+    def is_testing(self) -> bool:
+        """Check if running in testing mode."""
+        return self.environment == "testing"
+
+
+@lru_cache()
+def get_settings() -> Settings:
+    """Get cached settings instance."""
+    return Settings()
+
+
+# Global settings instance
+settings = get_settings()
